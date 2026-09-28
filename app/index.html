@@ -31,11 +31,13 @@
 
   <section>
     <h2>📷 Your photos</h2>
-    <div class="chips" id="counts"></div>
+    <div class="chips seg" id="boothMode"></div>
+    <div class="counts-row"><span id="countsLabel" hidden>Photos:</span><div class="chips" id="counts"></div></div>
     <div class="slots" id="slots"></div>
     <div class="row" style="flex-wrap:nowrap">
-      <button id="openCam" type="button" class="primary" style="flex:1.4 1 auto;padding:12px 10px">📸 Camera</button>
-      <label class="btn" style="flex:1.2 1 auto;padding:12px 10px">
+      <button id="openCam" type="button" class="primary" style="flex:1.2 1 auto;padding:12px 8px">📸 Photos</button>
+      <button id="openVid" type="button" class="primary vidbtn" style="flex:1.1 1 auto;padding:12px 8px">🎥 Video</button>
+      <label class="btn" style="flex:1 1 auto;padding:12px 8px">
         🖼️ <span id="multiLabel">Upload</span>
         <input type="file" id="multi" accept="image/*" multiple hidden>
       </label>
@@ -200,8 +202,17 @@
   <details class="card" data-key="layout">
     <summary><span>🧩 Layout &amp; style</span><span class="val" id="sum-layout"></span></summary>
     <div class="body">
-    <h3 style="margin-top:0">Layout</h3>
+    <h3 style="margin-top:0">Photo booth layouts</h3>
     <div class="chips" id="layouts"></div>
+    <h3>Collages <span style="font-weight:600">· 1 to 9 photos</span></h3>
+    <div class="chips" id="collages"></div>
+    <div id="collageOpts" hidden>
+      <h3>Collage size</h3>
+      <div class="chips" id="collageSizes"></div>
+      <p class="hint" style="text-align:left" id="collageSizeHint"></p>
+      <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
+      <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
+    </div>
     <h3>Photo style</h3>
     <div class="chips" id="styles"></div>
     <h3>Photo shape</h3>
@@ -259,6 +270,21 @@
     <div class="btnrow"><button type="button" id="previewStickers">😎 Stickers &amp; props</button><button type="button" id="previewText">🔤 Add text</button></div>
   </section>
 
+  <section id="videoSection" hidden>
+    <h2>🎬 Your video</h2>
+    <div class="preview-wrap vid"><canvas id="vidPreview"></canvas></div>
+    <p class="hint" id="vidPrevHint">Change the background, message, filters, face paint or stickers above and this preview follows along.
+      Tap <b>Remake video</b> to rebuild it (takes a few seconds).</p>
+    <div class="btnrow">
+      <button type="button" class="primary" id="vidRemake">🎬 Remake video</button>
+      <button type="button" id="vidOpen">▶️ Open video</button>
+    </div>
+    <div class="btnrow">
+      <button type="button" id="vidStickers2">😎 Video stickers</button>
+      <button type="button" id="vidNew">🎥 Record new</button>
+    </div>
+  </section>
+
   <div class="sticky-save">
     <button id="jump" type="button" aria-label="Show preview">👀</button>
     <button class="primary" id="save" type="button" disabled>Add photos to save</button>
@@ -297,10 +323,16 @@
     <button class="cam-btn" id="camPropsBtn" type="button" aria-label="Face props" aria-pressed="false">😎</button>
     <button class="cam-btn" id="camFlip" type="button" aria-label="Switch camera">🔄</button>
   </div>
+  <div id="camZoomLabel" hidden></div>
   <div class="cam-bottom">
+    <div class="cam-zoom" id="camZoom"></div>
     <div id="camShots"></div>
     <div class="cam-strip props" id="camProps" hidden></div>
     <div class="cam-strip small" id="camFilters"></div>
+    <div class="cam-kind" id="camKind" role="tablist">
+      <button type="button" data-kind="photo" role="tab">📷 Photo</button>
+      <button type="button" data-kind="video" role="tab">🎥 Video</button>
+    </div>
     <div class="cam-strip" id="camModes"></div>
     <div class="cam-controls">
       <button class="cam-btn left" id="camTimer" type="button">⏱ 3s</button>
@@ -340,6 +372,13 @@
     <div class="chips save-modes" id="vidModes"></div>
     <video id="outVideo" controls loop playsinline></video>
     <div class="chips save-modes music" id="vidMusic"></div>
+    <div class="size-row" id="vidSizeRow">
+      <label>📐 <select id="vidSize" aria-label="Size for social media"></select></label>
+      <label><select id="vidFit" aria-label="How to fit it">
+        <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
+        <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
+      </select></label>
+    </div>
     <p class="hint" id="videoHint"></p>
     <div class="btnrow">
       <a class="btn primary" id="vidDl" href="#" download>⬇️ Video</a>
@@ -351,6 +390,9 @@
     </div>
     <div class="btnrow">
       <button type="button" id="vidStickers">😎 Stickers</button>
+      <button type="button" id="vidDesign">🎨 Change design</button>
+    </div>
+    <div class="btnrow">
       <button type="button" id="vidRetake">🎥 Record again</button>
     </div>
     <button type="button" class="cancel" id="vidClose">Close</button>
@@ -459,6 +501,13 @@
     <div class="chips save-modes" id="saveModes" hidden></div>
     <img id="savedImg" alt="Your photo booth picture">
     <div class="save-picks" id="savePicks" hidden></div>
+    <div class="size-row" id="saveSizeRow">
+      <label>📐 <select id="saveSize" aria-label="Size for social media"></select></label>
+      <label><select id="saveFit" aria-label="How to fit it">
+        <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
+        <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
+      </select></label>
+    </div>
     <p class="hint" id="saveHint"></p>
     <div class="row">
       <a class="btn primary" id="dlBtn" href="#" download>⬇️ Save to device</a>
@@ -491,6 +540,7 @@
 
 <script src="js/filters.js"></script>
 <script src="js/props.js"></script>
+<script src="js/holidays.js"></script>
 <script src="stickers/stickers.js"></script>
 <script src="js/emoji-data.js"></script>
 <script src="js/encoders.js"></script>

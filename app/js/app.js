@@ -28,7 +28,34 @@
   }
   // photo shapes (path only; caller calls beginPath)
   function shapePath(ctx, shape, x, y, w, h, rr) {
-    if (shape === 'oval') {
+    const cx = x + w / 2, cy = y + h / 2, m = Math.min(w, h);
+    const polyPts = (pts) => { pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.closePath(); };
+    if (shape === 'circle') {
+      ctx.moveTo(cx + m / 2, cy); ctx.arc(cx, cy, m / 2, 0, Math.PI * 2);
+    } else if (shape === 'arch') {
+      const R = w / 2;
+      ctx.moveTo(x, y + h); ctx.lineTo(x, y + Math.min(R, h)); ctx.arc(cx, y + Math.min(R, h), R, Math.PI, 0); ctx.lineTo(x + w, y + h); ctx.closePath();
+    } else if (shape === 'hexagon') {
+      polyPts([[x + w * .25, y], [x + w * .75, y], [x + w, cy], [x + w * .75, y + h], [x + w * .25, y + h], [x, cy]]);
+    } else if (shape === 'diamond') {
+      polyPts([[cx, y], [x + w, cy], [cx, y + h], [x, cy]]);
+    } else if (shape === 'star') {
+      const pts = [];
+      for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, k = i % 2 ? .48 : 1; pts.push([cx + Math.cos(a) * w / 2 * k, cy + Math.sin(a) * h / 2 * k * 1.05 + h * .04]); }
+      polyPts(pts);
+    } else if (shape === 'scallop' || shape === 'stamp') {
+      // bumpy edge all the way round (scallops point out, a postage stamp's bites point in)
+      const R0 = m * (shape === 'stamp' ? .035 : .05), inset = shape === 'stamp' ? 0 : R0;
+      const X0 = x + inset, Y0 = y + inset, X1 = x + w - inset, Y1 = y + h - inset;
+      const edge = (ax, ay, bx, by) => {
+        const L = Math.hypot(bx - ax, by - ay), k = Math.max(3, Math.round(L / (R0 * 2.2))), r = L / k / 2, ang = Math.atan2(by - ay, bx - ax);
+        for (let i = 0; i < k; i++) {
+          const t = (i + .5) / k;
+          ctx.arc(ax + (bx - ax) * t, ay + (by - ay) * t, r, ang + Math.PI, ang, shape === 'stamp');
+        }
+      };
+      ctx.moveTo(X0, Y0); edge(X0, Y0, X1, Y0); edge(X1, Y0, X1, Y1); edge(X1, Y1, X0, Y1); edge(X0, Y1, X0, Y0); ctx.closePath();
+    } else if (shape === 'oval') {
       ctx.moveTo(x + w, y + h / 2);
       ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
     } else if (shape === 'heart') {
@@ -545,6 +572,12 @@
       } }
   };
 
+  // holiday backgrounds (js/holidays.js) go before "Your Colors" and "Your Photo"
+  if (window.PBHolidays) {
+    const tail = {}; ['custom', 'photo'].forEach(k => { tail[k] = THEMES[k]; delete THEMES[k]; });
+    Object.assign(THEMES, window.PBHolidays.themes, tail);
+  }
+
   const FONTS = {
     playful: { label: 'Playful', main: '900', sub: '800', fam: ROUNDED, k: .2 },
     bold: { label: 'Bold', main: '900', sub: '700', fam: 'Impact,"Arial Black","Franklin Gothic Heavy",sans-serif', k: .16 },
@@ -553,7 +586,7 @@
     script: { label: 'Script', main: '700', sub: '600', fam: '"Snell Roundhand","Brush Script MT","Segoe Script","Apple Chancery","Dancing Script",cursive', k: .12 }
   };
 
-  const PRESETS = [
+  const PRESETS_BASE = [
     { name: '🎂 Birthday', theme: 'confetti', line1: 'Happy Birthday!', left: '🎈', right: '🎂', font: 'playful' },
     { name: '💍 Wedding', theme: 'blush', line1: 'Just Married', left: '💍', right: '🥂', font: 'script' },
     { name: '🥂 Anniversary', theme: 'gold', line1: 'Happy Anniversary', left: '🥂', right: '💕', font: 'elegant', frame: 'gold' },
@@ -573,6 +606,9 @@
     { name: '✏️ Blank', theme: 'minwhite', line1: '', left: '', right: '', font: 'classic' }
   ];
 
+  // everyday occasions, then the year's holidays in calendar order, then Blank
+  const PRESETS = PRESETS_BASE.slice(0, -1).concat((window.PBHolidays && window.PBHolidays.presets) || [], PRESETS_BASE.slice(-1));
+
   const EMOJIS = ['🎉', '🎈', '🎂', '🎁', '🥳', '🎊', '✨', '⭐', '❤️', '💕', '💍', '🥂', '🍾', '💐', '🎓', '🏆',
     '🍼', '👶', '🎄', '❄️', '☃️', '🎃', '👻', '🦇', '🎆', '🇺🇸', '🍂', '🦃', '🥧', '🌻', '🌸', '🌈',
     '☀️', '🌴', '🏖️', '🪩', '🎵', '🎤', '📸', '⚽', '🏀', '🏈', '⚾', '🐶', '🐱', '🦄', '🍀', '🐣'];
@@ -580,9 +616,11 @@
   const FRAME_COLORS = { white: '#ffffff', black: '#111111', gold: '#d4af37', pink: '#ffc2d9' };
 
   // ================= state =================
+  const MAX_PHOTOS = 9;
+  function noPhotos() { return Array(MAX_PHOTOS).fill(null); }
   const today = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   const state = {
-    photos: [null, null, null, null],
+    photos: noPhotos(),
     count: 3, theme: 'confetti', layout: 'strip', style: 'tilt', shape: 'rect', seed: 20260927,
     line1: 'Happy Birthday!', line2: today, font: 'playful',
     textMode: 'auto', textColor: '#ffffff', outlineMode: 'auto', outlineColor: '#540d6e',
@@ -591,14 +629,16 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none'
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
+    collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
+    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -609,7 +649,9 @@
       if (!PBFilters.byId[state.filter]) state.filter = 'none';
       if (!state.stickerSets || typeof state.stickerSets !== 'object' || Array.isArray(state.stickerSets)) state.stickerSets = {};
       if (!Array.isArray(state.vstickers)) state.vstickers = [];
-      if (!LAYOUTS.some(l => l.id === state.layout)) state.layout = 'strip';
+      if (!LAYOUTS.concat(COLLAGES).some(l => l.id === state.layout)) state.layout = 'strip';
+      state.count = clamp(Math.round(state.count) || 3, 1, MAX_PHOTOS);
+      if (!isCollage() && state.count > 4) state.count = 4;
       if (state.frame === 'none') { state.frame = 'white'; state.frameSize = 0; }
       if (!FONTS[state.font]) state.font = 'playful';
       if (state.theme === 'photo') state.theme = 'confetti'; // background photo isn't stored
@@ -625,6 +667,29 @@
   }
 
   // ================= layout =================
+  // Picture sizes for social media (also used when saving). Ratios are width / height.
+  const SIZES = [
+    { id: 'square', label: '◻️ Square 1:1', hint: 'Instagram & Facebook posts', w: 1080, h: 1080 },
+    { id: 'portrait', label: '▯ Portrait 4:5', hint: 'Instagram feed (tallest it allows)', w: 1080, h: 1350 },
+    { id: 'story', label: '📱 Story 9:16', hint: 'Stories, Reels, TikTok, Snapchat, Shorts', w: 1080, h: 1920 },
+    { id: 'pin', label: '📌 Tall 2:3', hint: 'Pinterest, 4×6 portrait prints', w: 1000, h: 1500 },
+    { id: 'land', label: '▭ Landscape 1.91:1', hint: 'Instagram landscape, Facebook & link previews', w: 1200, h: 628 },
+    { id: 'wide', label: '🖥️ Wide 16:9', hint: 'X/Twitter, YouTube, TVs', w: 1920, h: 1080 },
+    { id: 'print', label: '🖼️ Landscape 3:2', hint: '4×6 landscape prints', w: 1800, h: 1200 }
+  ];
+  const sizeOf = (id) => SIZES.find(z => z.id === id) || SIZES[0];
+
+  const COLLAGES = [
+    { id: 'c-grid', label: '▦ Grid' },
+    { id: 'c-hero', label: '🌟 Big + small' },
+    { id: 'c-mosaic', label: '🧱 Mosaic' },
+    { id: 'c-columns', label: '🏙️ Columns' },
+    { id: 'c-center', label: '🎯 Center' },
+    { id: 'c-film', label: '🎞️ Film' },
+    { id: 'c-scatter', label: '📷 Scattered' }
+  ];
+  const isCollage = (id) => /^c-/.test(id || state.layout);
+
   const LAYOUTS = [
     { id: 'strip', label: '📏 Strip' },
     { id: 'grid', label: '🔲 Collage' },
@@ -645,12 +710,120 @@
     { id: 'rect', label: '⬛ Square' },
     { id: 'rounded', label: '▢ Rounded' },
     { id: 'oval', label: '⚪ Oval' },
+    { id: 'circle', label: '🔵 Circle' },
+    { id: 'arch', label: '🌈 Arch' },
+    { id: 'hexagon', label: '⬢ Hexagon' },
+    { id: 'diamond', label: '🔷 Diamond' },
+    { id: 'star', label: '⭐ Star' },
+    { id: 'scallop', label: '🌸 Scalloped' },
+    { id: 'stamp', label: '📮 Stamp' },
     { id: 'heart', label: '❤️ Heart' }
   ];
 
   // Every layout returns the canvas size, one rect per photo (optional fixed rotation),
   // a base frame thickness, and the caption box.
+  // Collages: photos tiled on a canvas of a social-media size, with even white gaps (or any background).
+  // Cells are laid out in a unit box first, then scaled into the picture.
+  function rowsFor(n, tall) {
+    const T = { 1: [1], 2: [2], 3: [3], 4: [2, 2], 5: [2, 3], 6: [3, 3], 7: [2, 3, 2], 8: [3, 2, 3], 9: [3, 3, 3] };
+    const TALL = { 1: [1], 2: [1, 1], 3: [1, 1, 1], 4: [2, 2], 5: [2, 1, 2], 6: [2, 2, 2], 7: [2, 3, 2], 8: [2, 2, 2, 2], 9: [3, 3, 3] };
+    return (tall ? TALL : T)[n];
+  }
+  function cellsFor(kind, n, ar) {            // ar = box width / height
+    const tall = ar < .8, wide = ar > 1.35, out = [];
+    const rowsLayout = (counts, rowWeights, cellWeights) => {
+      const rw = rowWeights || counts.map(() => 1), tot = rw.reduce((a, b) => a + b, 0);
+      let y = 0, k = 0;
+      counts.forEach((c, i) => {
+        const h = rw[i] / tot, ws = (cellWeights && cellWeights(i, c)) || Array(c).fill(1), wt = ws.reduce((a, b) => a + b, 0);
+        let x = 0;
+        for (let j = 0; j < c; j++) { out.push({ x, y, w: ws[j] / wt, h }); x += ws[j] / wt; k++; }
+        y += h;
+      });
+    };
+    const colsLayout = (counts, cellWeights) => {
+      let x = 0;
+      counts.forEach((c, i) => {
+        const w = 1 / counts.length, hs = (cellWeights && cellWeights(i, c)) || Array(c).fill(1), ht = hs.reduce((a, b) => a + b, 0);
+        let y = 0;
+        for (let j = 0; j < c; j++) { out.push({ x, y, w, h: hs[j] / ht }); y += hs[j] / ht; }
+        x += w;
+      });
+    };
+    if (n === 1) return [{ x: 0, y: 0, w: 1, h: 1 }];
+    switch (kind) {
+      case 'c-hero': {
+        const rest = n - 1;
+        if (wide) {                               // big one on the left, the rest in a grid on the right
+          const cols = rest > 4 ? 2 : 1, per = Math.ceil(rest / cols);
+          out.push({ x: 0, y: 0, w: .6, h: 1 });
+          for (let i = 0; i < rest; i++) { const c = Math.floor(i / per), r = i % per, inCol = Math.min(per, rest - c * per); out.push({ x: .6 + c * .4 / cols, y: r / inCol, w: .4 / cols, h: 1 / inCol }); }
+        } else {
+          const rows = rest > 4 ? [Math.ceil(rest / 2), Math.floor(rest / 2)] : [rest];
+          out.push({ x: 0, y: 0, w: 1, h: rows.length > 1 ? .56 : .66 });
+          const top = out[0].h, rh = (1 - top) / rows.length;
+          rows.forEach((c, i) => { for (let j = 0; j < c; j++) out.push({ x: j / c, y: top + i * rh, w: 1 / c, h: rh }); });
+        }
+        return out;
+      }
+      case 'c-mosaic':
+        rowsLayout(rowsFor(n, tall), rowsFor(n, tall).map((_, i) => (i % 2 ? .8 : 1.2)),
+          (i, c) => Array.from({ length: c }, (_, j) => ((i + j) % 2 ? 1 : 1.7)));
+        return out;
+      case 'c-columns': {
+        const counts = rowsFor(n, !tall);         // columns of stacked photos, staggered heights
+        colsLayout(counts, (i, c) => Array.from({ length: c }, (_, j) => ((i + j) % 2 ? 1.35 : 1)));
+        return out;
+      }
+      case 'c-center': {
+        if (n < 3) break;
+        const rest = n - 1, left = Math.ceil(rest / 2), right = rest - left, side = .25;
+        out.push({ x: side, y: 0, w: 1 - 2 * side, h: 1 });
+        for (let i = 0; i < left; i++) out.push({ x: 0, y: i / left, w: side, h: 1 / left });
+        for (let i = 0; i < right; i++) out.push({ x: 1 - side, y: i / right, w: side, h: 1 / right });
+        return out;
+      }
+      case 'c-film': {                              // one line of photos, the way the canvas is longest
+        for (let i = 0; i < n; i++) out.push(ar >= 1 ? { x: i / n, y: 0, w: 1 / n, h: 1 } : { x: 0, y: i / n, w: 1, h: 1 / n });
+        return out;
+      }
+      case 'c-scatter': {
+        const r = mulberry32(state.seed + n), cols = Math.ceil(Math.sqrt(n * ar)), rows = Math.ceil(n / cols);
+        for (let i = 0; i < n; i++) {
+          const c = i % cols, rr = Math.floor(i / cols), cw = 1 / cols, ch = 1 / rows;
+          // slightly overlapping prints, kept inside the canvas
+          const w = cw * 1.08, h = ch * 1.08;
+          out.push({ x: clamp(c * cw - cw * .04 + (r() - .5) * cw * .1, .02, 1 - w - .02), y: clamp(rr * ch - ch * .04 + (r() - .5) * ch * .1, .02, 1 - h - .02),
+            w: w * .96, h: h * .96, rot: (r() - .5) * 12 });
+        }
+        return out;
+      }
+    }
+    rowsLayout(rowsFor(n, tall));
+    return out;
+  }
+  function collageLayout(kind, n) {
+    const Z = sizeOf(state.collageSize), k = 1800 / Math.max(Z.w, Z.h);
+    const W = Math.round(Z.w * k), H = Math.round(Z.h * k), m = Math.min(W, H);
+    const gap = m * (state.collageGap == null ? .025 : state.collageGap), cap = state.caption ? Math.round(H * (H > W ? .14 : .2)) : 0;
+    const box = { x: gap, y: gap, w: W - 2 * gap, h: H - 2 * gap - cap };
+    const scatter = kind === 'c-scatter';
+    // cells touching the edge keep the full outer margin; shared edges get half a gap each side
+    const rects = cellsFor(kind, n, box.w / box.h).map(c => {
+      let x0 = box.x + c.x * box.w, y0 = box.y + c.y * box.h, x1 = x0 + c.w * box.w, y1 = y0 + c.h * box.h;
+      if (!scatter) {
+        if (x0 > box.x + .5) x0 += gap / 2;
+        if (y0 > box.y + .5) y0 += gap / 2;
+        if (x1 < box.x + box.w - .5) x1 -= gap / 2;
+        if (y1 < box.y + box.h - .5) y1 -= gap / 2;
+      }
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, rot: c.rot };
+    });
+    return { W, H, rects, border: m * .012, cap: cap ? { x: 0, y: H - cap - gap / 2, w: W, h: cap } : null, collage: true };
+  }
+
   function computeLayout(kind, n) {
+    if (isCollage(kind)) return collageLayout(kind, n);
     if (kind === 'grid') {
       const W = 1600, m = 90, gap = 60, top = 90, cap = 400;
       const p = (W - 2 * m - gap) / 2;
@@ -897,6 +1070,7 @@
     const ir = innerRect(rect, border);
     const px = -ir.w / 2, py = -rect.h / 2;              // photo box, top-left
     const photoR = shape === 'rounded' ? Math.min(ir.w, ir.h) * 0.08 : 0;
+    const curvy = shape !== 'rect' && shape !== 'rounded';     // frame follows the outline instead of a box
 
     ctx.save();
     ctx.translate(rect.x + rect.w / 2 + jit.dx, rect.y + rect.h / 2 + jit.dy);
@@ -914,14 +1088,14 @@
       const side = style === 'film' ? b + border * 2.2 : b;
       const cardR = style === 'film' ? border * 0.4 : border * 0.5;
       shapePath(ctx, 'rect', -rect.w / 2 - side, -rect.h / 2 - b, rect.w + 2 * side, rect.h + 2 * b, cardR);
-    } else if (shape === 'heart' || shape === 'oval') {
+    } else if (curvy) {
       shapePath(ctx, shape, px, py, ir.w, ir.h, 0);
     } else {
       const rr = shape === 'rounded' ? photoR + b : (b ? b * 0.8 : 0);
       shapePath(ctx, shape, px - b, py - b, ir.w + 2 * b, ir.h + 2 * b, rr);
     }
     if (fill || state.shadow) ctx.fill();
-    if (!card && b && (shape === 'heart' || shape === 'oval')) {
+    if (!card && b && curvy) {
       // even-width outline that follows the curve (drawn after the fill so the shadow sits underneath)
       ctx.strokeStyle = fill; ctx.lineWidth = b * 2; ctx.lineJoin = 'round';
       ctx.stroke();
@@ -1023,6 +1197,7 @@
   }
 
   function drawCaption(ctx, L, theme) {
+    if (!L.cap) return;
     const F = FONTS[state.font] || FONTS.playful;
     const fill = state.textMode === 'custom' ? state.textColor : (theme.text || '#ffffff');
     const outline = state.outlineMode === 'none' ? null : state.outlineMode === 'custom' ? state.outlineColor : theme.accent;
@@ -1076,6 +1251,7 @@
     if (typeof updateSummaries === 'function') updateSummaries();
     saveSettings();
     keepPhotosSoon();
+    videoPreviewSoon();
   }
 
   // ================= keep photos across reloads =================
@@ -1105,7 +1281,7 @@
   async function keepPhotos() {
     if (!window.indexedDB) return;
     try {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < MAX_PHOTOS; i++) {
         const p = state.photos[i];
         const sig = p ? [p.url, p.zoom, p.cx, p.cy, p.filter].join('|') : '';
         if (keptSig[i] === sig) continue;
@@ -1121,7 +1297,7 @@
     if (!window.indexedDB) return 0;
     let n = 0;
     try {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < MAX_PHOTOS; i++) {
         const rec = await photoTx('readonly', s => s.get('slot' + i));
         if (!rec || !rec.blob || state.photos[i]) continue;
         const bmp = await createImageBitmap(rec.blob);
@@ -1139,7 +1315,7 @@
     if (!state.photos.some(Boolean)) { toast('Nothing to clear'); return; }
     if (!confirm('Remove all photos and start a new strip? (Your design and stickers stay.)')) return;
     state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
-    state.photos = [null, null, null, null];
+    state.photos = noPhotos();
     buildSlots(); schedule();
   });
 
@@ -1187,12 +1363,33 @@
       b.textContent = it.label || it.name;
       if (styleFn) styleFn(b, it);
       b.addEventListener('click', () => onPick(it, idx));
+      if (it.k) b.dataset.k = it.k;
       el.appendChild(b);
     });
+    if (el._search) el._search();
+  }
+  // a search box above a long list of options; matches the label, tooltip and extra keywords
+  function addSearch(listEl, placeholder) {
+    const inp = document.createElement('input');
+    inp.type = 'search'; inp.className = 'opt-search'; inp.placeholder = placeholder; inp.setAttribute('aria-label', placeholder);
+    listEl.parentNode.insertBefore(inp, listEl);
+    const empty = document.createElement('p'); empty.className = 'hint'; empty.hidden = true; empty.textContent = 'Nothing matches — try another word';
+    listEl.parentNode.insertBefore(empty, listEl.nextSibling);
+    listEl._search = () => {
+      const words = inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      [...listEl.children].forEach(c => {
+        const text = (c.textContent + ' ' + (c.title || '') + ' ' + (c.dataset.k || '')).toLowerCase();
+        c.hidden = !words.every(w => text.includes(w));
+        if (!c.hidden) shown++;
+      });
+      empty.hidden = shown > 0;
+    };
+    inp.addEventListener('input', () => { listEl._search(); listEl.scrollLeft = 0; });
   }
 
   function buildPresets() {
-    chipGroup($('presets'), PRESETS, (_, i) => state.preset === i, (p, i) => {
+    chipGroup($('presets'), PRESETS.map(p => ({ ...p, k: [p.k, THEMES[p.theme] && THEMES[p.theme].name, p.line1].join(' ') })), (_, i) => state.preset === i, (p, i) => {
       state.preset = i;
       state.theme = p.theme; state.line1 = p.line1;
       state.iconLeft = p.left; state.iconRight = p.right; state.font = p.font;
@@ -1212,8 +1409,8 @@
 
   // ---- my designs: everything except the photos, saved on this device ----
   const DESIGNS_KEY = 'photobooth-designs-v1';
-  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone'].includes(k)).concat('camProps');
-  function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
+  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone', 'lastCollage', 'lastBooth', 'boothStash'].includes(k)).concat('camProps');
+  function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { if (state[k] !== undefined) d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
   function applyDesign(d) {
     DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
     if (!THEMES[state.theme] || state.theme === 'photo') state.theme = 'confetti';
@@ -1279,7 +1476,7 @@
     const full = state.photos.slice(0, n).every(Boolean);
     $('multiLabel').textContent = full ? 'Replace' : 'Upload';
     queueFilterThumbs();
-    slotsEl.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+    slotsEl.style.gridTemplateColumns = `repeat(${n <= 4 ? n : n === 9 ? 3 : Math.ceil(n / 2)}, 1fr)`;
     state.photos.slice(0, n).forEach((p, i) => {
       const el = document.createElement('button');
       el.type = 'button';
@@ -1356,15 +1553,50 @@
   $('photoMenu').addEventListener('click', (e) => { if (e.target.id === 'photoMenu') closePhotoMenu(); });
 
   function buildCounts() {
-    chipGroup($('counts'), [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }], it => state.count === it.n, it => {
+    const col = isCollage();
+    chipGroup($('boothMode'), [{ id: false, label: '🎞️ Photo booth' }, { id: true, label: '▦ Collage' }], m => col === m.id,
+      m => selectLayout(m.id ? (state.lastCollage || 'c-grid') : (state.lastBooth || 'strip')));
+    const opts = col ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ label: String(n), n })) : [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }];
+    chipGroup($('counts'), opts, it => state.count === it.n, it => {
       state.count = it.n; buildCounts(); buildSlots(); schedule();
     });
+    $('counts').classList.toggle('nums', col);
+    $('countsLabel').hidden = !col;
+  }
+  // Switching between photo-booth layouts and collages: collages start clean (white, straight, no frame,
+  // no message) and the booth look comes back when you switch back.
+  const STASH_KEYS = ['theme', 'style', 'shape', 'frameSize', 'shadow'];
+  function selectLayout(id) {
+    const was = isCollage(), now = isCollage(id);
+    if (!was && now) {
+      state.boothStash = {}; STASH_KEYS.forEach(k => { state.boothStash[k] = state[k]; });
+      Object.assign(state, { theme: 'minwhite', style: 'straight', shape: 'rect', frameSize: 0, shadow: false });
+      const filled = state.photos.filter(Boolean).length;
+      if (filled > state.count) state.count = Math.min(MAX_PHOTOS, filled);
+    } else if (was && !now) {
+      if (state.boothStash) Object.assign(state, state.boothStash);
+      state.count = clamp(state.count, 3, 4);
+    }
+    // the scattered collage looks like a pile of prints: white borders and shadows
+    if (now && id === 'c-scatter' && state.layout !== 'c-scatter') Object.assign(state, { frame: 'white', frameSize: 1.4, shadow: true });
+    else if (now && id !== 'c-scatter' && state.layout === 'c-scatter') Object.assign(state, { frameSize: 0, shadow: false });
+    state.layout = id;
+    if (now) state.lastCollage = id; else state.lastBooth = id;
+    markThemes(); syncUI(); schedule();
   }
   function buildLayouts() {
-    chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => { state.layout = it.id; buildLayouts(); schedule(); });
+    chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => selectLayout(it.id));
+    chipGroup($('collages'), COLLAGES, it => state.layout === it.id, it => selectLayout(it.id));
+    $('collageOpts').hidden = !isCollage();
+    chipGroup($('collageSizes'), SIZES, z => state.collageSize === z.id, z => { state.collageSize = z.id; buildLayouts(); schedule(); });
+    [...$('collageSizes').children].forEach((b, i) => { b.title = SIZES[i].hint; });
+    $('collageSizeHint').textContent = sizeOf(state.collageSize).hint + ` · ${sizeOf(state.collageSize).w}×${sizeOf(state.collageSize).h}`;
+    $('collageGap').value = state.collageGap; $('collageCaption').checked = !!state.caption;
     chipGroup($('styles'), STYLES, it => state.style === it.id, it => { state.style = it.id; buildLayouts(); schedule(); });
     chipGroup($('shapes'), SHAPES, it => state.shape === it.id, it => { state.shape = it.id; buildLayouts(); schedule(); });
   }
+  $('collageGap').addEventListener('input', (e) => { state.collageGap = +e.target.value; schedule(); });
+  $('collageCaption').addEventListener('change', (e) => { state.caption = e.target.checked; schedule(); });
   function buildFonts() {
     chipGroup($('fonts'), Object.entries(FONTS).map(([id, f]) => ({ ...f, id })), it => state.font === it.id, it => {
       state.font = it.id; buildFonts(); schedule();
@@ -1395,10 +1627,12 @@
       label.textContent = t.name;
       b.append(cv, label);
       b.addEventListener('click', () => { state.theme = id; markThemes(); schedule(); });
+      b.dataset.k = id + ' ' + (PRESETS.filter(p => p.theme === id).map(p => p.name + ' ' + (p.k || '')).join(' '));
       el.appendChild(b);
       drawThumb(id);
     });
     markThemes();
+    if (el._search) el._search();
   }
   function markThemes() {
     document.querySelectorAll('#themes .tile').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === state.theme)));
@@ -1561,7 +1795,7 @@
   let sheetFile = null, sheetUrl = null;
   function showSaveSheet(blob, name, title, hint, modes) {
     $('printBtn').hidden = !/^image\/(jpeg|png)$/.test(blob.type) || /gif|anim/i.test(name);
-    $('saveModes').hidden = !modes; if (!modes) $('savePicks').hidden = true;
+    $('saveModes').hidden = !modes; if (!modes) { $('savePicks').hidden = true; $('saveSizeRow').hidden = true; }
     $('shareBtn').textContent = '📤 Share';
     if (sheetUrl) URL.revokeObjectURL(sheetUrl);
     sheetUrl = URL.createObjectURL(blob);
@@ -1602,6 +1836,35 @@
     return cv;
   }
   const toJpeg = (cv) => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
+  // Resize a finished picture to a social-media size: fit inside (edges blurred / white / black) or crop to fill.
+  function fitInto(ctx, src, W, H, fit, scratch) {
+    const sw = src.width, sh = src.height;
+    if (fit === 'fill') {
+      const k = Math.max(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k); return;
+    }
+    if (fit === 'blur') {
+      const t = scratch || document.createElement('canvas'); t.width = 24; t.height = Math.max(1, Math.round(24 * H / W));
+      const tc = t.getContext('2d'), k0 = Math.max(t.width / sw, t.height / sh);
+      tc.drawImage(src, (t.width - sw * k0) / 2, (t.height - sh * k0) / 2, sw * k0, sh * k0);
+      ctx.imageSmoothingQuality = 'high'; ctx.drawImage(t, 0, 0, W, H);
+      ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, 0, W, H);
+    } else { ctx.fillStyle = fit === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, W, H); }
+    const k = Math.min(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k);
+  }
+  function toSocial(src, id, fit) {
+    if (!id || id === 'orig') return src;
+    const Z = sizeOf(id), cv = document.createElement('canvas'); cv.width = Z.w; cv.height = Z.h;
+    fitInto(cv.getContext('2d'), src, Z.w, Z.h, fit);
+    return cv;
+  }
+  function fillSizeSelect(sel, value) {
+    if (!sel.options.length) {
+      sel.add(new Option('Original size', 'orig'));
+      SIZES.forEach(z => sel.add(new Option(`${z.label.replace(/^\S+ /, '')} · ${z.hint}`, z.id)));
+    }
+    sel.value = value || 'orig';
+  }
+
   // A 4×6 photo print at 300 dpi. A strip is printed twice side by side (cut down the middle), like a
   // real photo booth; other layouts are centred on the sheet in whichever way round fits best.
   function composePrint(src) {
@@ -1625,7 +1888,7 @@
   async function buildSaveSheet() {
     const name = `photobooth-${save.stamp}`;
     if (save.mode === 'booth') {
-      if (!save.strip) { render(); save.strip = await toJpeg(canvas); }
+      if (!save.strip) { render(); save.strip = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit)); }
       if (!save.strip) { toast('Could not create the image'); return; }
       showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
     } else if (save.mode === 'print') {
@@ -1635,7 +1898,7 @@
         'Print at 4×6 in (10×15 cm), "fit to page" off, on a printer or at a photo kiosk.', true);
     } else {
       const idx = filledIdx();
-      if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(composePhotoOnly(i))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
+      if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(composePhotoOnly(i), state.saveSize, state.saveFit))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
       save.pick = Math.min(save.pick, save.photos.length - 1);
       const f = save.photos[save.pick];
       showSaveSheet(f, f.name, 'Your photos 📷', photoHint(), true);
@@ -1652,9 +1915,14 @@
       b.appendChild(im); b.addEventListener('click', () => { save.pick = k; buildSaveSheet(); });
       picks.appendChild(b);
     });
+    $('saveSizeRow').hidden = save.mode === 'print';
+    fillSizeSelect($('saveSize'), state.saveSize); $('saveFit').value = state.saveFit; $('saveFit').hidden = state.saveSize === 'orig';
     chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Design' }, { id: 'photos', label: '📷 Photos' }, { id: 'print', label: '🖨️ 4×6 print' }],
       m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
   }
+  const resave = () => { Object.assign(save, { strip: null, photos: [] }); saveSettings(); buildSaveSheet(); };
+  $('saveSize').addEventListener('change', (e) => { state.saveSize = e.target.value; resave(); });
+  $('saveFit').addEventListener('change', (e) => { state.saveFit = e.target.value; resave(); });
   $('save').addEventListener('click', () => {
     Object.assign(save, { strip: null, print: null, photos: [], pick: 0, stamp: stamp() });
     buildSaveSheet();
@@ -1829,7 +2097,8 @@
     set('background', THEMES[state.theme].name);
     set('message', state.line1.trim() || state.line2.trim() || 'No text');
     set('icons', (state.iconLeft || state.iconRight) ? `${state.iconLeft || '–'}  ${state.iconRight || '–'}` : 'None');
-    set('layout', `${plain(labelOf(LAYOUTS, state.layout))} · ${plain(labelOf(STYLES, state.style))}`);
+    set('layout', isCollage() ? `Collage · ${plain(labelOf(COLLAGES, state.layout))} · ${plain(labelOf(SIZES, state.collageSize))}`
+      : `${plain(labelOf(LAYOUTS, state.layout))} · ${plain(labelOf(STYLES, state.style))}`);
     const frame = state.frameSize <= 0 ? 'No frame' : `${state.frame === 'custom' ? 'Custom' : state.frame[0].toUpperCase() + state.frame.slice(1)} frame`;
     set('frames', frame + (state.edge !== 'none' ? ' + border' : ''));
     set('filters', (PBFilters.byId[state.filter] || {}).name || 'Original');
@@ -1874,6 +2143,7 @@
       el.appendChild(b);
     });
     markFilters();
+    if (el._search) el._search();
   }
   function markFilters() {
     document.querySelectorAll('#filterTiles .tile').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === state.filter)));
@@ -2496,10 +2766,12 @@
     return cps[0] + state.tone + rest.join('');
   }
   function buildStickerTray() {
-    chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; buildStickerTray(); });
+    chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
     const el = $('stItems'); el.innerHTML = ''; el.scrollLeft = 0; el.scrollTop = 0;
     el.classList.toggle('grid', stEd.tab === 'emoji');
-    const cats = $('stCats'); cats.hidden = stEd.tab !== 'emoji';
+    $('stCats').hidden = false;
+    $('stCatChips').hidden = $('stTones').hidden = stEd.tab !== 'emoji';
+    $('stSearch').placeholder = { props: 'Search props', fun: 'Search stickers', words: 'Search words', emoji: 'Search emoji' }[stEd.tab];
     const add = (content, onClick, cls, title) => {
       const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls;
       if (title) { b.title = title; b.setAttribute('aria-label', title); }
@@ -2515,8 +2787,8 @@
       add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
       add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
       add('💥 Your own burst', () => { const t = askText('Words for the comic burst:', 'WHOA!', 16); if (t) addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 }); }, 'txt');
-      PBProps.WORDS.bubble.forEach(t => add(propIcon('bubble', t), () => addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 })));
-      PBProps.WORDS.burst.forEach(t => add(propIcon('burst', t), () => addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 })));
+      PBProps.WORDS.bubble.forEach(t => add(propIcon('bubble', t), () => addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }), '', t + ' speech bubble'));
+      PBProps.WORDS.burst.forEach(t => add(propIcon('burst', t), () => addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 }), '', t + ' comic burst'));
     } else {
       const D = window.PBEmojiData || [];
       chipGroup($('stTones'), TONES.map(t => ({ t, label: '✋' + t })), o => (state.tone || '') === o.t,
@@ -2529,8 +2801,21 @@
       if (!list.length) add('No emoji match', () => {}, 'txt wide');
       list.forEach(x => add(x.e, () => addSticker({ kind: 'emoji', id: x.e, s: .2 }), '', x.n));
     }
+    if (stEd.tab !== 'emoji') filterTray();
   }
-  $('stSearch').addEventListener('input', (e) => { emojiQuery = e.target.value.trim(); buildStickerTray(); });
+  $('stSearch').addEventListener('input', (e) => {
+    emojiQuery = e.target.value.trim();
+    if (stEd.tab === 'emoji') { buildStickerTray(); return; }
+    filterTray();
+  });
+  function filterTray() {
+    const words = emojiQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    [...$('stItems').children].forEach(b => {
+      if (b.classList.contains('wide') || b.classList.contains('txt')) return;       // "add your own" buttons stay
+      const t = ((b.title || '') + ' ' + b.textContent).toLowerCase();
+      b.hidden = !words.every(w => t.includes(w));
+    });
+  }
   function askText(label, def, max) {
     const t = prompt(label, def);
     return t && t.trim() ? t.trim().slice(0, max || 60) : null;
@@ -2645,7 +2930,7 @@
     { id: 'slowmo', label: '🐢 Slow-mo', kind: 'video', secs: 3 },
     { id: 'spin', label: '🌀 360 spin', kind: 'video', secs: 6 }
   ];
-  const cam = { stream: null, facing: 'user', mode: 'booth', timer: 3, shots: [], slot: -1, busy: false, cancel: false,
+  const cam = { dzoom: 1, hw: null, deviceId: null, lenses: [], lastOf: { photo: 'booth', video: 'boomerang' }, stream: null, facing: 'user', mode: 'booth', timer: 3, shots: [], slot: -1, busy: false, cancel: false,
     stopEarly: false, recording: false, glamBW: false, audio: null, last: null };
   const camVideo = $('camVideo');
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -2654,7 +2939,12 @@
   const camFilter = () => cam.mode === 'glam' ? (cam.glamBW ? 'glambw' : 'glam') : cam.mode === 'comic' ? 'comic' : state.filter;
 
   function buildCamUI() {
-    const modes = CAM_MODES.filter(m => cam.slot < 0 || m.kind === 'photo');
+    // Photo / Video switch: shows that kind's modes and remembers the last one picked of each
+    const kind = camMode().kind;
+    cam.lastOf[kind] = cam.mode;
+    $('camKind').hidden = cam.slot >= 0;
+    [...$('camKind').children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.kind === kind)));
+    const modes = CAM_MODES.filter(m => m.kind === kind);
     const mEl = $('camModes'); mEl.innerHTML = '';
     modes.forEach(m => {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = m.label;
@@ -2708,7 +2998,7 @@
     }
   }
   function applyPreview() {
-    camVideo.style.transform = cam.facing === 'user' ? 'scaleX(-1)' : 'none';
+    camVideo.style.transform = (cam.facing === 'user' ? 'scaleX(-1) ' : '') + (cam.dzoom > 1 ? `scale(${cam.dzoom})` : '');
     camVideo.style.filter = [PBFilters.css(camFilter()), PBFilters.adjCss(state.adj)].join(' ').trim() || 'none';
   }
 
@@ -2731,11 +3021,13 @@
       return;
     }
     try {
+      const pick = cam.deviceId ? { deviceId: { exact: cam.deviceId } } : { facingMode: cam.facing };
       cam.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cam.facing, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false
+        video: { ...pick, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false
       });
       camVideo.srcObject = cam.stream;
       await camVideo.play().catch(() => {});
+      await setupZoom();
       applyPreview();
     } catch (e) {
       const n = e && e.name;
@@ -2744,6 +3036,98 @@
           : 'The camera could not start (' + (n || 'unknown error') + ').');
     }
   }
+  // ---- zoom: the camera's own zoom where the browser offers it, otherwise a digital (crop) zoom that
+  // also applies to the photos and videos; plus the phone's extra lenses (ultra wide / telephoto) ----
+  async function setupZoom() {
+    const track = cam.stream && cam.stream.getVideoTracks()[0];
+    const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+    cam.track = track;
+    cam.hw = caps.zoom && caps.zoom.max > caps.zoom.min ? { min: caps.zoom.min, max: caps.zoom.max } : null;
+    cam.hwZoom = cam.hw ? (track.getSettings().zoom || cam.hw.min) : 1;
+    if (cam.hw) cam.dzoom = 1;
+    // lens list: only labelled lenses (iPhone style "Back Ultra Wide Camera") are offered
+    try {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && d.label);
+      const back = devs.filter(d => /back|rear|environment/i.test(d.label));
+      const find = (re) => back.find(d => re.test(d.label));
+      const wide = find(/ultra ?wide/i), tele = find(/tele/i), main = back.find(d => /^back camera$/i.test(d.label.trim())) || find(/back camera/i);
+      cam.lenses = cam.facing === 'environment' && (wide || tele) && main
+        ? [wide && { label: '.5', id: wide.deviceId }, { label: '1×', id: main.deviceId }, tele && { label: /3/.test(tele.label) ? '3×' : '2×', id: tele.deviceId, tele: true }].filter(Boolean)
+        : [];
+    } catch (e) { cam.lenses = []; }
+    buildZoomUI();
+  }
+  const zoomNow = () => (cam.hw ? cam.hwZoom : cam.dzoom || 1);
+  let zoomBusy = false, zoomWant = null, zoomLabelT = 0;
+  function setZoom(z, quiet) {
+    if (cam.hw) {
+      z = clamp(z, cam.hw.min, cam.hw.max); cam.hwZoom = z;
+      zoomWant = z;
+      if (!zoomBusy) {
+        const go = () => {
+          if (zoomWant == null || !cam.track) { zoomBusy = false; return; }
+          const v = zoomWant; zoomWant = null; zoomBusy = true;
+          cam.track.applyConstraints({ advanced: [{ zoom: v }] }).catch(() => {}).finally(go);
+        };
+        go();
+      }
+    } else {
+      cam.dzoom = clamp(z, 1, 5); applyPreview();
+    }
+    if (!quiet) {
+      const lab = $('camZoomLabel'); lab.textContent = zoomNow().toFixed(1).replace(/\.0$/, '') + '×'; lab.hidden = false;
+      clearTimeout(zoomLabelT); zoomLabelT = setTimeout(() => { lab.hidden = true; }, 900);
+    }
+    markZoom();
+  }
+  function buildZoomUI() {
+    const el = $('camZoom'); el.innerHTML = '';
+    const btn = (label, on, fn) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.dataset.label = label;
+      b.addEventListener('click', fn); el.appendChild(b);
+    };
+    cam.lenses.forEach(l => btn(l.label, false, async () => {
+      if (cam.busy || cam.deviceId === l.id) return;
+      cam.deviceId = l.id; cam.dzoom = 1; await startStream();
+    }));
+    const base = cam.hw ? Math.max(1, cam.hw.min) : 1, top = cam.hw ? cam.hw.max : 5;
+    [1, 2, 3, 5].filter(v => v * base <= top + .01).forEach(v => {
+      const label = v + '×';
+      if (cam.lenses.some(l => l.label === label)) return;
+      btn(label, false, () => { if (cam.lenses.length && cam.deviceId !== (cam.lenses.find(l => l.label === '1×') || {}).id) { cam.deviceId = cam.lenses.find(l => l.label === '1×').id; cam.dzoom = v; startStream().then(() => setZoom(v * base)); return; } setZoom(v * base); });
+    });
+    markZoom();
+  }
+  function markZoom() {
+    const lens = cam.lenses.find(l => l.id === cam.deviceId);
+    const z = zoomNow() / (cam.hw ? Math.max(1, cam.hw.min) : 1);
+    [...$('camZoom').children].forEach(b => {
+      const L = b.dataset.label;
+      const on = lens && lens.label !== '1×' ? L === lens.label : Math.abs(parseFloat(L) - z) < .25 && L !== '.5';
+      b.setAttribute('aria-pressed', String(!!on));
+    });
+  }
+  // pinch (or scroll) on the camera picture to zoom
+  (() => {
+    const area = $('camera'), pts = new Map();
+    let d0 = 0, z0 = 1;
+    const onPicture = (e) => e.target === camVideo || e.target === camOverlay || e.target === area;
+    area.addEventListener('pointerdown', (e) => {
+      if (!onPicture(e)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; d0 = Math.hypot(a.x - b.x, a.y - b.y); z0 = zoomNow(); }
+    });
+    area.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2 && d0 > 10) { const [a, b] = [...pts.values()]; setZoom(z0 * Math.hypot(a.x - b.x, a.y - b.y) / d0); }
+    });
+    const end = (e) => { pts.delete(e.pointerId); if (pts.size < 2) d0 = 0; };
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => area.addEventListener(t, end));
+    area.addEventListener('wheel', (e) => { if (!onPicture(e)) return; e.preventDefault(); setZoom(zoomNow() * Math.exp(-e.deltaY * .002)); }, { passive: false });
+    camVideo.style.touchAction = 'none';                      // the page mustn't zoom instead
+  })();
+
   function stopStream() {
     if (cam.stream) cam.stream.getTracks().forEach(t => t.stop());
     cam.stream = null; camVideo.srcObject = null;
@@ -2792,11 +3176,12 @@
   function grabFrame(max) {
     const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
     if (!vw) return null;
-    const sc = Math.min(1, max / Math.max(vw, vh));
-    const c = document.createElement('canvas'); c.width = Math.round(vw * sc); c.height = Math.round(vh * sc);
+    const z = cam.dzoom || 1, sw = vw / z, sh = vh / z;          // digital zoom keeps the middle
+    const sc = Math.min(1, max / Math.max(sw, sh));
+    const c = document.createElement('canvas'); c.width = Math.round(sw * sc); c.height = Math.round(sh * sc);
     const x = c.getContext('2d');
     if (cam.facing === 'user') { x.translate(c.width, 0); x.scale(-1, 1); }
-    x.drawImage(camVideo, 0, 0, c.width, c.height);
+    x.drawImage(camVideo, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, c.width, c.height);
     return c;
   }
   function thumbOf(c) {
@@ -2914,6 +3299,7 @@
   $('camFlip').addEventListener('click', async () => {
     if (cam.busy) return;
     cam.facing = cam.facing === 'user' ? 'environment' : 'user';
+    cam.deviceId = null; cam.dzoom = 1;
     await startStream();
   });
   $('camTimer').addEventListener('click', () => {
@@ -2923,6 +3309,13 @@
   });
   $('camExtra').addEventListener('click', () => { cam.glamBW = !cam.glamBW; buildCamUI(); applyPreview(); });
   $('openCam').addEventListener('click', () => openCamera());
+  $('openVid').addEventListener('click', () => openCamera({ mode: cam.lastOf.video || 'boomerang' }));
+  [...$('camKind').children].forEach(b => b.addEventListener('click', () => {
+    if (cam.busy) return;
+    const kind = b.dataset.kind; if (camMode().kind === kind) return;
+    cam.mode = cam.lastOf[kind] || CAM_MODES.find(m => m.kind === kind).id;
+    cam.shots = []; buildCamUI(); applyPreview();
+  }));
 
   // ================= party mode =================
   // A kiosk for guests: full screen, one big button, 4-shot countdown (with the host's design, stickers
@@ -2953,7 +3346,7 @@
   }
   function partyShoot() {
     // guests' photos never mix with the next group's
-    state.photos = [null, null, null, null];
+    state.photos = noPhotos();
     cam.party = true; cam.timer = cam.timer || 3;
     $('camera').classList.add('party');
     openCamera({ mode: 'booth' }).then(() => { if (party.on && cam.stream) $('camShutter').click(); });
@@ -2979,7 +3372,7 @@
     clearInterval(party.idle);
     if ($('partyImg').src) URL.revokeObjectURL($('partyImg').src);
     state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
-    state.photos = [null, null, null, null]; buildSlots(); schedule();
+    state.photos = noPhotos(); buildSlots(); schedule();
     partyAttract();
   }
   $('partyResult').addEventListener('pointerdown', () => { party.left = 45; });
@@ -3122,7 +3515,7 @@
     const raw = PBFace.detect(camVideo) || [];
     live.count = raw.length;
     // video pixels → screen: the preview is object-fit: cover, and mirrored for the selfie camera
-    const k = Math.max(cw / vw, ch / vh), ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2, mirror = cam.facing === 'user';
+    const k = Math.max(cw / vw, ch / vh) * (cam.dzoom || 1), ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2, mirror = cam.facing === 'user';
     const map = (q) => ({ x: mirror ? cw - (q.x * k + ox) : q.x * k + ox, y: q.y * k + oy });
     if (paintOn() && PBFace.meshReady()) {
       // paint needs the face underneath it (it blends with the skin) and must match this exact frame,
@@ -3204,6 +3597,7 @@
     }
     setBusy(false);
     cam.last = { mode: m, clip, mirror: cam.facing === 'user' };
+    keepClip();
     // props worn in the camera ride along on the video, one set per face that was in view
     state.vstickers = state.vstickers.filter(st => !(st.face && st.face.cam));
     for (let k = 0; k < Math.max(1, live.count); k++) state.camProps.forEach(cp => state.vstickers.push(camSticker(cp, 0, k)));
@@ -3240,15 +3634,17 @@
     cam.recording = true; $('camRec').hidden = false;
     const t0 = performance.now();
     let el = 0;
+    let still = null;
     while ((el = (performance.now() - t0) / 1000) < secs) {
       if (cam.cancel || (cam.stopEarly && el > 1)) break;
+      if (!still && el > Math.min(.5, secs / 2)) still = grabFrame(720);   // a frame for the design preview
       $('camRec').textContent = `● REC ${el.toFixed(1)}s`;
       await sleep(100);
     }
     rec.stop(); await stopped;
     cam.recording = false; $('camRec').hidden = true;
     if (cam.cancel) throw new Error('cancel');
-    return { blob: new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' }), secs: Math.min(secs, el) };
+    return { blob: new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' }), secs: Math.min(secs, el), still: still || grabFrame(720), zoom: cam.dzoom || 1 };
   }
 
   // Renders frames into a 720×1280 framed picture: background, caption, photo frame, stickers.
@@ -3263,8 +3659,13 @@
     const bctx = bg.getContext('2d');
     theme.draw(bctx, W, H, themeRng(state.theme + 'video'));
     drawCaption(bctx, L, theme);
-    const out = document.createElement('canvas'); out.width = W; out.height = H;
-    const octx = out.getContext('2d');
+    // the booth/plain picture is drawn on `stage`; `out` is what gets recorded (a social size, or the same canvas)
+    const stage = document.createElement('canvas'); stage.width = W; stage.height = H;
+    const octx = stage.getContext('2d');
+    const Z = state.vidSize && state.vidSize !== 'orig' ? sizeOf(state.vidSize) : null, zk = Z ? 1280 / Math.max(Z.w, Z.h) : 1;
+    const out = Z ? document.createElement('canvas') : stage;
+    if (Z) { out.width = Math.round(Z.w * zk) & ~1; out.height = Math.round(Z.h * zk) & ~1; }
+    const blurTmp = document.createElement('canvas');
     const frame = document.createElement('canvas');
     const fctx = frame.getContext('2d', { willReadFrequently: true });
     const holder = { canvas: frame, zoom: 1, cx: null, cy: null, raw: true };
@@ -3273,18 +3674,19 @@
     const maskCache = new WeakMap(), meshCache = new WeakMap(), swapOut = document.createElement('canvas');
     const swapOn = () => state.bgSwap !== 'none' && !(state.bgSwap === 'custom' && !swapImage) && PBFace.segReady();
     const comp = {
-      out, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
+      out, stage, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
       track: new Map(), raw: null,
       // faces found in the last frame, in picture coordinates
       facesOf(raw) { return raw ? placeFaces(raw, photoXform(holder, L.rects[0], jit, L.border), 0, W, H) : null; },
       draw(src, mirror, opts = {}) {
-        const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
-        if (!sw) return;
+        const fw = src.videoWidth || src.width, fh = src.videoHeight || src.height;
+        if (!fw) return;
+        const z = opts.zoom || 1, sw = fw / z, sh = fh / z;         // digital zoom from the camera
         const sc = Math.min(1, (plain ? 1280 : 720) / Math.max(sw, sh)), w = Math.round(sw * sc), h = Math.round(sh * sc);
         if (frame.width !== w || frame.height !== h) { frame.width = w; frame.height = h; }
         fctx.save();
         if (mirror) { fctx.translate(w, 0); fctx.scale(-1, 1); }
-        fctx.drawImage(src, 0, 0, w, h);
+        fctx.drawImage(src, (fw - sw) / 2, (fh - sh) / 2, sw, sh, 0, 0, w, h);
         fctx.restore();
         if (opts.keepRaw) {                                    // an unfiltered copy, to look for faces in later
           comp.raw = document.createElement('canvas'); comp.raw.width = w; comp.raw.height = h;
@@ -3312,7 +3714,7 @@
         if (plain) {
           const T = photoXform(holder, L.rects[0], jit, L.border);
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
-          if (out.width !== ow || out.height !== oh) { out.width = ow; out.height = oh; }
+          if (stage.width !== ow || stage.height !== oh) { stage.width = ow; stage.height = oh; }
           octx.drawImage(frame, 0, 0, ow, oh);
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, ow, oh); }
           if (opts.stickers !== false) {
@@ -3327,6 +3729,7 @@
           if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
           drawEdge(octx, W, H);
         }
+        if (Z) fitInto(out.getContext('2d'), stage, out.width, out.height, state.vidFit, blurTmp);
         if (comp.collect && opts.stickers !== false) {
           const now = opts.t != null ? opts.t : performance.now();
           if (now - comp.lastGrab >= comp.gifDelay - 1) {
@@ -3438,7 +3841,7 @@
       const v = cv.v, secs = clip.secs;
       const rateAt = (t) => { const f = t / secs; return m.id === 'slowmo' ? (f < .15 ? 1 : .5) : (f < .2 ? 1.5 : f < .72 ? .5 : 1.75); };
       try {
-        comp.draw(v, mirror, { t: 0 });
+        comp.draw(v, mirror, { t: 0, zoom: clip.zoom });
         const blob = await recordCanvas(comp.out, 30, () => new Promise((resolve) => {
           let done = false;
           const guard = setTimeout(() => finish(), (secs / .5 + 4) * 1000);
@@ -3452,7 +3855,7 @@
             if (done) return;
             const t = v.currentTime, r = rateAt(t);
             if (Math.abs(v.playbackRate - r) > .01) v.playbackRate = r;
-            comp.draw(v, mirror, { t: performance.now() - t0 });
+            comp.draw(v, mirror, { t: performance.now() - t0, zoom: clip.zoom });
             pct(t / secs);
             if (t >= secs - .04 || (v.paused && t > 0.2)) { finish(); return; }
             requestAnimationFrame(tick);
@@ -3473,19 +3876,79 @@
     try {
       const res = await makeVideo(L.mode, L.clip, L.mirror);
       showVideoResult(res, L.mode);
+      drawVideoPreview();
     } catch (e) {
       toast('Could not make the video: ' + (e && e.message || e));
     }
   }
+  // ---- "Your video" on the main page: live design preview + remake, and the clip kept on the device ----
+  const designSig = () => JSON.stringify([designOf(), state.vplain, state.music, state.adj, state.bgSwap, state.facePaint, swapImageId]);
+  let vidPrevTimer = 0;
+  function videoPreviewSoon() { if (!cam.last) return; clearTimeout(vidPrevTimer); vidPrevTimer = setTimeout(drawVideoPreview, 250); }
+  function clipStill(clip) { return clip.frames ? clip.frames[Math.floor(clip.frames.length / 2)] : clip.still; }
+  function drawVideoPreview() {
+    const L = cam.last; if (!L) return;
+    $('videoSection').hidden = false;
+    const src = clipStill(L.clip);
+    if (!src) return;
+    const comp = videoComposer(state.vplain); comp.collect = false;
+    comp.draw(src, false, { t: 0 });
+    const out = $('vidPreview'), k = Math.min(1, 540 / Math.max(comp.out.width, comp.out.height));
+    out.width = Math.round(comp.out.width * k); out.height = Math.round(comp.out.height * k);
+    out.getContext('2d').drawImage(comp.out, 0, 0, out.width, out.height);
+    const dirty = !!vid.url && vid.sig !== designSig();
+    $('vidPrevHint').classList.toggle('dirty', dirty);
+    $('vidPrevHint').innerHTML = dirty
+      ? '✨ You changed the design — tap <b>Remake video</b> to put it in the video.'
+      : 'Change the background, message, filters, face paint or stickers above and this preview follows along. Tap <b>Remake video</b> to rebuild it (takes a few seconds).';
+    $('vidOpen').disabled = !vid.url;
+  }
+  $('vidRemake').addEventListener('click', () => { try { audioCtx(); } catch (e) { /* no audio */ } buildVideo(); });
+  $('vidOpen').addEventListener('click', () => { if (!vid.url) return; $('videoSheet').hidden = false; syncScroll(); $('outVideo').play().catch(() => {}); });
+  $('vidStickers2').addEventListener('click', () => { $('videoSheet').hidden = true; $('vidStickers').click(); });
+  $('vidNew').addEventListener('click', () => openCamera({ mode: cam.lastOf.video || 'boomerang' }));
+  $('vidDesign').addEventListener('click', () => {
+    closeVideoSheet(); drawVideoPreview();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('🎨 Change the design, then tap 🎬 Remake video');
+  });
+  // keep the last clip so the video can be remade after closing the app
+  async function keepClip() {
+    const L = cam.last; if (!L || !window.indexedDB) return;
+    try {
+      const jpg = (c) => new Promise(r => c.toBlob(r, 'image/jpeg', .9));
+      const rec = { mode: L.mode.id, mirror: L.mirror };
+      if (L.clip.frames) rec.frames = await Promise.all(L.clip.frames.map(jpg));
+      else { rec.blob = L.clip.blob; rec.secs = L.clip.secs; rec.still = L.clip.still ? await jpg(L.clip.still) : null; }
+      await photoTx('readwrite', s => s.put(rec, 'lastclip'));
+    } catch (e) { /* storage full: the clip just won't survive a reload */ }
+  }
+  async function restoreClip() {
+    try {
+      const rec = await photoTx('readonly', s => s.get('lastclip'));
+      if (!rec) return;
+      const toCanvas = async (b) => {
+        const bmp = await createImageBitmap(b), c = document.createElement('canvas');
+        c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0); return c;
+      };
+      const clip = rec.frames ? { frames: await Promise.all(rec.frames.map(toCanvas)) }
+        : { blob: rec.blob, secs: rec.secs, still: rec.still ? await toCanvas(rec.still) : null };
+      cam.last = { mode: CAM_MODES.find(m => m.id === rec.mode) || CAM_MODES[3], clip, mirror: rec.mirror };
+      drawVideoPreview();
+    } catch (e) { /* nothing kept */ }
+  }
+
   function showVideoResult(res, m) {
     if (vid.url) URL.revokeObjectURL(vid.url);
     const ext = /mp4/.test(res.blob.type) ? 'mp4' : 'webm';
     vid = { url: URL.createObjectURL(res.blob), gif: res.gif, gifDelay: res.gifDelay, name: `photobooth-${m.id}-${stamp()}` };
+    vid.sig = designSig();
     vid.file = new File([res.blob], `${vid.name}.${ext}`, { type: res.blob.type || 'video/' + ext });
     // with music, try to play it with sound (browsers may insist on muted until the next tap)
     const v = $('outVideo'); v.src = vid.url; v.muted = !state.music || state.music === 'none';
     v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
     $('vidDl').href = vid.url; $('vidDl').download = vid.file.name;
+    fillSizeSelect($('vidSize'), state.vidSize); $('vidFit').value = state.vidFit; $('vidFit').hidden = state.vidSize === 'orig';
     chipGroup($('vidMusic'), PBMusic.TUNES, t => (state.music || 'none') === t.id, async t => {
       if (state.music === t.id) return;
       try { audioCtx(); } catch (e) { /* no audio here */ }
@@ -3510,6 +3973,9 @@
   }
   function closeVideoSheet() { $('videoSheet').hidden = true; $('outVideo').pause(); syncScroll(); }
   $('vidClose').addEventListener('click', closeVideoSheet);
+  const remakeFor = (k) => async (e) => { state[k] = e.target.value; saveSettings(); closeVideoSheet(); await buildVideo(); };
+  $('vidSize').addEventListener('change', remakeFor('vidSize'));
+  $('vidFit').addEventListener('change', remakeFor('vidFit'));
   $('vidShare').addEventListener('click', async () => { try { await navigator.share({ files: [vid.file] }); } catch (e) { /* cancelled */ } });
   $('vidRetake').addEventListener('click', () => { const m = cam.last && cam.last.mode; closeVideoSheet(); openCamera({ mode: m ? m.id : 'boomerang' }); });
 
@@ -3552,7 +4018,7 @@
     }
     base = document.createElement('canvas'); base.width = comp.W; base.height = comp.H;
     const bctx = base.getContext('2d');
-    bctx.drawImage(comp.out, 0, 0);
+    bctx.drawImage(comp.stage, 0, 0);                        // stickers live in booth-picture coordinates
     // props are placed on this frame; while the video is made they follow each face
     let faces = null;
     PBFace.load().then(ok => { faces = comp.facesOf(ok && comp.raw ? PBFace.detect(comp.raw) : []) || []; facesChanged(); });
@@ -3569,6 +4035,9 @@
   // ================= start =================
   PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); buildSwapChips(); });
   loadSettings();
+  addSearch($('presets'), '🔍 Search occasions (e.g. july, dad, easter)');
+  addSearch($('themes'), '🔍 Search backgrounds');
+  addSearch($('filterTiles'), '🔍 Search filters');
   syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips();
   setTimeout(readDesignLink, 300);
   buildThemes();
@@ -3576,6 +4045,7 @@
   syncUI();
   buildFilterTiles();
   render();
+  restoreClip();
   restorePhotos().then(n => {
     if (!n) return;
     buildSlots(); schedule();
