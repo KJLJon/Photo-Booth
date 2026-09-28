@@ -557,18 +557,17 @@
     <div class="chips save-modes" id="saveModes" hidden></div>
     <img id="savedImg" alt="Your photo booth picture">
     <div class="save-picks" id="savePicks" hidden></div>
-    <div class="size-row" id="saveSizeRow">
-      <label>📐 <select id="saveSize" aria-label="Size for social media"></select></label>
-      <label><select id="saveFit" aria-label="How to fit it">
-        <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
-        <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
-      </select></label>
+    <div id="saveSizeRow">
+      <div class="size-chips" id="saveSizes" role="group" aria-label="Size for social media"></div>
+      <div class="chips fit-chips" id="saveFits" role="group" aria-label="How to fit it"></div>
+      <p class="size-note" id="sizeNote"></p>
     </div>
     <p class="hint" id="saveHint"></p>
     <div class="row">
       <a class="btn primary" id="dlBtn" href="#" download>⬇️ Save to device</a>
       <button id="shareBtn" type="button">📤 Share</button>
       <button id="printBtn" type="button">🖨️ Print</button>
+      <button id="saveAll" type="button">📦 Every size</button>
     </div>
     <button id="sheetClose" type="button">Close</button>
   </div>

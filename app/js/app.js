@@ -2084,6 +2084,22 @@
     fitInto(cv.getContext('2d'), src, Z.w, Z.h, fit);
     return cv;
   }
+  // the size picker on the save screen: a little shape for each size so you can see how tall / wide it is
+  const FITS = [{ id: 'blur', label: '🌫️ Blur edges' }, { id: 'white', label: '⬜ White' }, { id: 'black', label: '⬛ Black' }, { id: 'fill', label: '✂️ Crop to fill' }];
+  function buildSizeChips(el, value, origRatio, onPick) {
+    el.innerHTML = '';
+    [{ id: 'orig', label: 'Original', w: origRatio, h: 1 }].concat(SIZES).forEach(z => {
+      const b = document.createElement('button'), r = z.w / z.h, box = 26;
+      b.type = 'button'; b.dataset.size = z.id; b.setAttribute('aria-pressed', String(z.id === value));
+      b.title = z.hint ? `${z.w}×${z.h} · ${z.hint}` : 'The size it was made at';
+      const sh = document.createElement('span'); sh.className = 'shape' + (z.id === 'orig' ? ' orig' : '');
+      sh.style.width = Math.round(box * Math.min(1, r)) + 'px'; sh.style.height = Math.round(box * Math.min(1, 1 / r)) + 'px';
+      b.append(sh, z.label.replace(/^\S+ /, ''));
+      b.addEventListener('click', () => onPick(z.id));
+      el.appendChild(b);
+    });
+    const on = el.querySelector('[aria-pressed="true"]'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   function fillSizeSelect(sel, value) {
     if (!sel.options.length) {
       sel.add(new Option('Original size', 'orig'));
@@ -2111,11 +2127,14 @@
     } else fit(36, 36, W - 72, H - 72);
     return cv;
   }
-  const save = { mode: 'booth', pick: 0, strip: null, photos: [] };
+  // Every size made on the save screen is kept (per size & fit), so flipping between them is instant.
+  const save = { mode: 'booth', pick: 0, strip: null, photos: [], strips: {}, photoSets: {} };
+  const sizeKey = () => state.saveSize === 'orig' ? 'orig' : state.saveSize + '|' + state.saveFit;
   async function buildSaveSheet() {
-    const name = `photobooth-${save.stamp}`;
+    const name = `photobooth-${save.stamp}`, key = sizeKey();
+    save.strip = save.strips[key] || null; save.photos = save.photoSets[key] || [];
     if (save.mode === 'booth') {
-      if (!save.strip) { render(); save.strip = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit)); }
+      if (!save.strip) { render(); save.strip = save.strips[key] = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit)); }
       if (!save.strip) { toast('Could not create the image'); return; }
       showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
     } else if (save.mode === 'print') {
@@ -2125,7 +2144,7 @@
         'Print at 4×6 in (10×15 cm), "fit to page" off, on a printer or at a photo kiosk.', true);
     } else {
       const idx = filledIdx();
-      if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(composePhotoOnly(i), state.saveSize, state.saveFit))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
+      if (!save.photos.length) save.photos = save.photoSets[key] = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(composePhotoOnly(i), state.saveSize, state.saveFit))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
       save.pick = Math.min(save.pick, save.photos.length - 1);
       const f = save.photos[save.pick];
       showSaveSheet(f, f.name, 'Your photos 📷', photoHint(), true);
@@ -2142,17 +2161,45 @@
       b.appendChild(im); b.addEventListener('click', () => { save.pick = k; buildSaveSheet(); });
       picks.appendChild(b);
     });
-    $('saveSizeRow').hidden = save.mode === 'print';
-    fillSizeSelect($('saveSize'), state.saveSize); $('saveFit').value = state.saveFit; $('saveFit').hidden = state.saveSize === 'orig';
+    $('saveSizeRow').hidden = $('saveAll').hidden = save.mode === 'print';
+    const im = $('savedImg'), origR = save.mode === 'photos' ? (save.origR || 1) : canvas.width / canvas.height;
+    buildSizeChips($('saveSizes'), state.saveSize, origR, id => { state.saveSize = id; resave(); });
+    chipGroup($('saveFits'), FITS, f => f.id === state.saveFit, f => { state.saveFit = f.id; resave(); });
+    $('saveFits').hidden = state.saveSize === 'orig';
+    const Z = SIZES.find(z => z.id === state.saveSize);
+    $('sizeNote').textContent = Z ? `${Z.w}×${Z.h} · ${Z.hint}` : 'Exactly as you made it. Pick a size to fit a social app.';
+    im.onload = () => {
+      // the "Original" shape follows the picture being saved (a single photo's own shape in Photos)
+      if (state.saveSize !== 'orig') return;
+      const r = im.naturalWidth / im.naturalHeight, sh = $('saveSizes').querySelector('.shape.orig');
+      if (save.mode === 'photos') save.origR = r;
+      if (sh) { sh.style.width = Math.round(26 * Math.min(1, r)) + 'px'; sh.style.height = Math.round(26 * Math.min(1, 1 / r)) + 'px'; }
+    };
     chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Design' }, { id: 'photos', label: '📷 Photos' }, { id: 'print', label: '🖨️ 4×6 print' }],
       m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
   }
-  const resave = () => { Object.assign(save, { strip: null, photos: [] }); saveSettings(); buildSaveSheet(); };
-  $('saveSize').addEventListener('change', (e) => { state.saveSize = e.target.value; resave(); });
-  $('saveFit').addEventListener('change', (e) => { state.saveFit = e.target.value; resave(); });
+  const resave = () => { saveSettings(); buildSaveSheet(); };
   $('save').addEventListener('click', () => {
-    Object.assign(save, { strip: null, print: null, photos: [], pick: 0, stamp: stamp() });
+    Object.assign(save, { strip: null, print: null, photos: [], strips: {}, photoSets: {}, pick: 0, stamp: stamp(), origR: 0 });
     buildSaveSheet();
+  });
+  // one tap: the design (or the chosen photo) in every social size at once
+  $('saveAll').addEventListener('click', async () => {
+    const btn = $('saveAll'), i = filledIdx()[save.pick];
+    const photo = save.mode === 'photos', src = photo ? composePhotoOnly(i) : (render(), canvas);
+    const base = `photobooth-${save.stamp}` + (photo ? `-photo${i + 1}` : '');
+    btn.disabled = true; btn.textContent = '⏳ Making sizes…';
+    const files = [];
+    for (const z of SIZES) files.push(new File([await toJpeg(toSocial(src, z.id, state.saveFit))], `${base}-${z.id}-${z.w}x${z.h}.jpg`, { type: 'image/jpeg' }));
+    btn.disabled = false; btn.textContent = '📦 Every size';
+    if ((isIOS || isAndroid) && navigator.canShare && navigator.canShare({ files })) { try { await navigator.share({ files }); } catch (err) { /* cancelled */ } return; }
+    for (const f of files) {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      await new Promise(r => setTimeout(r, 300));
+    }
+    toast(`Saved ${files.length} sizes 📦`);
   });
   $('printBtn').addEventListener('click', () => printImage(sheetFile));
   $('dlBtn').addEventListener('click', () => { if (!isIOS && sheetFile) setTimeout(() => toast('Saved ' + sheetFile.name), 300); });

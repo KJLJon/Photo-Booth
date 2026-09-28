@@ -219,6 +219,18 @@ body.mode-video .only-photo, body.mode-photo .only-video { display: none !import
 .save-modes.music { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; margin: 10px 0 0; scrollbar-width: none; }
 .size-row { display: flex; gap: 6px; justify-content: center; margin: 8px 0 0; flex-wrap: wrap; }
 .size-row select { font: inherit; font-size: .82rem; padding: 6px 8px; border-radius: 10px; border: 2px solid var(--line); background: #fff; color: var(--ink); max-width: 100%; }
+.size-chips { display: flex; gap: 6px; overflow-x: auto; padding: 10px 2px 4px; scrollbar-width: thin; }
+.size-chips button {
+  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px;
+  min-width: 64px; height: 70px; padding: 6px 6px 5px; border-radius: 12px; border: 2px solid var(--line);
+  background: #fff; color: var(--ink); font: inherit; font-size: .72rem; line-height: 1.1;
+}
+.size-chips button[aria-pressed="true"] { border-color: var(--accent); background: #fdf0ff; font-weight: 700; }
+.size-chips .shape { display: block; border: 2px solid currentColor; border-radius: 3px; opacity: .75; }
+.size-chips .shape.orig { border-style: dashed; }
+.fit-chips { justify-content: center; margin-top: 6px; }
+.fit-chips .chip { padding: 5px 10px; font-size: .78rem; }
+.size-note { font-size: .78rem; color: #6b5a7a; margin: 4px 0 0; min-height: 1em; }
 .save-modes .chip { padding: 7px 12px; font-size: .85rem; }
 .save-picks { display: flex; gap: 8px; justify-content: center; margin-top: 8px; overflow-x: auto; }
 .save-picks button { flex: none; padding: 0; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 3px solid transparent; background: none; }
