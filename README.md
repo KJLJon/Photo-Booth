@@ -127,8 +127,10 @@ to a friend as a link.
 
 **Printing:** 4×6 prints at 300 dpi (strips are doubled with a cut line) and a Print button.
 
-**Your work is kept:** photos stay on the device, so a reload, crash or update doesn't lose them
-(**Start over** clears them).
+**Your work is kept:** photos and settings stay on the device, so a reload, crash or update doesn't
+lose them. **🧹 Start fresh** (in the footer, or **Start over** under your photos) offers:
+remove just the photos · reset the design & all settings but keep the photos · start completely fresh
+(photos, stickers, last video and settings). Saved designs (⭐) and the party gallery are always kept.
 
 **Saving without the booth design:** the save screen has **🎉 Design / 📷 Photos / 🖨️ 4×6 print**
 options. Just the photos saves each photo on its own (pick one, or share them all) with its filter,

@@ -492,3 +492,9 @@ body:not(.mode-booth) .only-booth, body:not(.mode-collage) .only-collage { displ
 .st-tools button b { font-weight: 400; font-size: 1.05rem; line-height: 1.1; }
 .st-tools button small { font-size: .62rem; font-weight: 700; opacity: .85; white-space: nowrap; }
 .st-tools button.add { background: #fff; color: #2b1740; }
+
+.reset-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.reset-list button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 3px; padding: 12px 14px; border-radius: 14px; }
+.reset-list button b { font-size: .98rem; }
+.reset-list button small { font-weight: 600; font-size: .78rem; opacity: .75; line-height: 1.3; }
+.reset-list button.danger { background: #fde8ee; color: #a3123a; }

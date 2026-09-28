@@ -718,6 +718,7 @@
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
+  let resetting = false;                                     // 🧹 start fresh in progress: save nothing more
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
     'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts', 'vidFrame', 'vidCrop', 'boothSlice', 'camPropsWho'];
@@ -741,6 +742,7 @@
     } catch (e) { /* storage unavailable */ }
   }
   function saveSettings() {
+    if (resetting) return;
     try {
       const out = { _date: today };
       SAVED_KEYS.forEach(k => { out[k] = state[k]; });
@@ -1486,9 +1488,10 @@
   }
   const keptSig = [];
   let keepTimer = 0;
-  function keepPhotosSoon() { clearTimeout(keepTimer); keepTimer = setTimeout(keepPhotos, 600); }
+  // at most 600 ms after the first change (not after the last one: a busy stretch of redraws mustn't hold it off)
+  function keepPhotosSoon() { if (!keepTimer) keepTimer = setTimeout(() => { keepTimer = 0; keepPhotos(); }, 600); }
   async function keepPhotos() {
-    if (!window.indexedDB) return;
+    if (!window.indexedDB || resetting) return;
     try {
       for (let i = 0; i < MAX_PHOTOS; i++) {
         const p = state.photos[i];
@@ -1520,13 +1523,34 @@
     } catch (e) { /* nothing saved, or storage blocked */ }
     return n;
   }
-  $('startOver').addEventListener('click', () => {
-    if (!state.photos.some(Boolean)) { toast('Nothing to clear'); return; }
-    if (!confirm('Remove all photos and start a new strip? (Your design and stickers stay.)')) return;
+  // ---- 🧹 start fresh: just the photos, the design & settings, or everything ----
+  // Saved designs (⭐) and the party gallery are never touched. Settings are saved all the time, so once a
+  // reset starts nothing is written back before the page reloads with the defaults.
+  function openReset() { $('resetSheet').hidden = false; syncScroll(); }
+  function closeReset() { $('resetSheet').hidden = true; syncScroll(); }
+  $('startOver').addEventListener('click', openReset);
+  $('startFresh').addEventListener('click', openReset);
+  $('resetCancel').addEventListener('click', closeReset);
+  $('resetSheet').addEventListener('click', (e) => { if (e.target.id === 'resetSheet') closeReset(); });
+  $('resetPhotos').addEventListener('click', () => {
+    closeReset();
+    if (!state.photos.some(Boolean)) { toast('No photos to remove'); return; }
     state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
     state.photos = noPhotos();
-    buildSlots(); schedule();
+    buildSlots(); schedule(); toast('Photos removed · your design stays');
   });
+  async function resetAll(everything) {
+    if (!confirm(everything ? 'Start completely fresh? Photos, stickers, the last video and every setting go back to the start.'
+      : 'Reset the design and all settings to the start? Your photos stay.')) return;
+    resetting = true;
+    try { localStorage.removeItem(SETTINGS_KEY); } catch (e) { /* storage unavailable */ }
+    if (everything && window.indexedDB) {
+      try { await photoTx('readwrite', s => s.clear()); } catch (e) { /* nothing stored */ }
+    }
+    location.reload();
+  }
+  $('resetDesign').addEventListener('click', () => resetAll(false));
+  $('resetEverything').addEventListener('click', () => resetAll(true));
 
   let pending = false;
   function schedule() {
@@ -2126,7 +2150,7 @@
   }
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
   const isAndroid = /Android/i.test(navigator.userAgent);
-  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery', 'cutEd'];
+  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery', 'cutEd', 'resetSheet'];
   function syncScroll() { document.body.style.overflow = OVERLAYS.some(id => !$(id).hidden) ? 'hidden' : ''; }
   function stamp() {
     const d = new Date(), pad = (n) => String(n).padStart(2, '0');

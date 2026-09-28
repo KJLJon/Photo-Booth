@@ -344,8 +344,21 @@
 </main>
 <footer class="app-foot">
   <span id="appVersion">Photo Booth</span> ·
-  <button type="button" class="linkbtn" id="forceUpdate">🔄 Check for updates</button>
+  <button type="button" class="linkbtn" id="forceUpdate">🔄 Check for updates</button> ·
+  <button type="button" class="linkbtn" id="startFresh">🧹 Start fresh</button>
 </footer>
+<div id="resetSheet" class="overlay" hidden>
+  <div class="sheet">
+    <h2>🧹 Start fresh</h2>
+    <p class="hint" style="margin-top:0">Your saved designs (⭐) and the party gallery are kept.</p>
+    <div class="reset-list">
+      <button type="button" id="resetPhotos"><b>📷 Remove the photos</b><small>Keeps your design, stickers and settings</small></button>
+      <button type="button" id="resetDesign"><b>🎨 Reset the design &amp; settings</b><small>Background, message, layout, filters, face paint, stickers, sizes… back to the start. Keeps your photos</small></button>
+      <button type="button" id="resetEverything" class="danger"><b>🧹 Start completely fresh</b><small>Everything back to the start: photos, stickers, last video and all settings</small></button>
+    </div>
+    <button type="button" class="cancel" id="resetCancel">Cancel</button>
+  </div>
+</div>
 <div id="toast"></div>
 <div id="updateBar" hidden><span>✨ Updated! Reload when ready</span><button type="button" class="primary" id="updateBtn">Reload</button></div>
 
