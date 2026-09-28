@@ -80,5 +80,7 @@ The camera needs `https://` or `http://localhost`. When running locally the serv
 isn't versioned, so turn on DevTools → Application → *Update on reload* while you edit.
 
 The face-tracking runtime (~11 MB of WebAssembly, plus a 230 KB model) is pinned to a version and
-checked against a SHA-256 hash in `scripts/fetch-vendor.sh`. It only downloads the first time
-someone opens the sticker studio, then stays cached for offline use.
+checked against a SHA-256 hash in `scripts/fetch-vendor.sh`. It downloads quietly in the background
+a couple of seconds after the app opens (unless the phone is in data-saver mode), then stays cached
+for offline use. Nothing waits for it: stickers work straight away, the sticker studio shows a
+progress bar, and face props start snapping on once it's ready.

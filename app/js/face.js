@@ -15,30 +15,63 @@
     }
   ];
 
-  let detector = null, loading = null, status = 'idle';
-  const listeners = [];
+  let detector = null, loading = null, status = 'idle', progress = 0;
+  const listeners = [], progressFns = [];
+  const setProgress = (p) => { progress = p; progressFns.forEach(fn => { try { fn(p); } catch (e) { /* ignore */ } }); };
+
+  // Downloads a file while reporting how much has arrived (goes through the service worker cache,
+  // so after the first time it's instant and works offline).
+  async function fetchBytes(url, onBytes) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${url}`);
+    if (!res.body || !res.body.getReader) { const b = await res.arrayBuffer(); onBytes(b.byteLength); return new Uint8Array(b); }
+    const reader = res.body.getReader(), parts = [];
+    let n = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value); n += value.length; onBytes(n);
+    }
+    const out = new Uint8Array(n);
+    let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  }
 
   async function create(src) {
     const mp = await import(src.lib);
+    setProgress(0.02);
     const files = await mp.FilesetResolver.forVisionTasks(src.wasm);
+    // fetch the big pieces ourselves so we can show progress (sizes are close enough for a progress bar)
+    const SIZES = { wasm: 11.8e6, model: 0.23e6 }, got = { wasm: 0, model: 0 };
+    const tick = () => setProgress(0.02 + 0.93 * (got.wasm + got.model) / (SIZES.wasm + SIZES.model));
+    const [wasm, model] = await Promise.all([
+      fetchBytes(files.wasmBinaryPath, n => { got.wasm = Math.min(n, SIZES.wasm); tick(); }),
+      fetchBytes(src.model, n => { got.model = Math.min(n, SIZES.model); tick(); })
+    ]);
+    const wasmUrl = URL.createObjectURL(new Blob([wasm], { type: 'application/wasm' }));
+    const fileset = { ...files, wasmBinaryPath: wasmUrl };
     const opts = (delegate) => ({
-      baseOptions: { modelAssetPath: src.model, delegate },
+      baseOptions: { modelAssetBuffer: model, delegate },
       runningMode: 'IMAGE', minDetectionConfidence: 0.5, minSuppressionThreshold: 0.3
     });
-    try { return await mp.FaceDetector.createFromOptions(files, opts('GPU')); } catch (e) {
-      return mp.FaceDetector.createFromOptions(files, opts('CPU'));
-    }
+    try {
+      try { return await mp.FaceDetector.createFromOptions(fileset, opts('GPU')); } catch (e) {
+        return await mp.FaceDetector.createFromOptions(fileset, opts('CPU'));
+      }
+    } finally { setTimeout(() => URL.revokeObjectURL(wasmUrl), 10000); }
   }
 
   // Resolves true once faces can be found, false if face tracking isn't available here.
+  // Safe to call any number of times; everything else in the app keeps working while it loads.
   function load() {
-    if (loading) return loading;
-    status = 'loading';
+    if (loading && status !== 'failed') return loading;         // after a failure (e.g. offline), try again
+    status = 'loading'; setProgress(0);
     loading = (async () => {
       for (const src of SOURCES) {
         try { detector = await create(src); break; } catch (e) { console.warn('Face finder: could not load from', src.lib, e); }
       }
       status = detector ? 'ready' : 'failed';
+      setProgress(1);
       listeners.splice(0).forEach(fn => { try { fn(!!detector); } catch (e) { /* ignore */ } });
       return !!detector;
     })();
@@ -87,6 +120,8 @@
   window.PBFace = {
     load, detect, pose,
     get status() { return status; },
+    get progress() { return progress; },
+    onProgress(fn) { progressFns.push(fn); },
     ready: () => !!detector,
     onReady(fn) { if (status === 'ready' || status === 'failed') fn(!!detector); else listeners.push(fn); }
   };

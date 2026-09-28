@@ -11,9 +11,17 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
+<style>
+  /* shown until the app's scripts are running, so a slow connection never looks like a blank page */
+  #boot { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; background: #fff6fb; color: #7a6a8a; font: 600 15px system-ui, -apple-system, sans-serif; }
+  #boot i { width: 42px; height: 42px; border-radius: 50%; border: 5px solid #ecdff5; border-top-color: #8a4dff; animation: bootspin .8s linear infinite; }
+  @keyframes bootspin { to { transform: rotate(360deg); } }
+</style>
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<div id="boot" role="status"><i></i>📸 Loading the photo booth…</div>
 <header>
   <h1>📸 Photo Booth ✨</h1>
   <p>Add photos · make it yours · save</p>
@@ -327,6 +335,7 @@
     </div>
     <button id="stDone" type="button" class="primary">✓ Done</button>
   </div>
+  <div class="dlbar" id="stFaceBar" hidden><i></i></div>
   <canvas id="stCanvas"></canvas>
   <div class="st-panel" id="stTools" hidden>
     <div class="st-tools">

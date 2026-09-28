@@ -1833,8 +1833,12 @@
     if (st) syncStyle(st);
     const n = stEd.faces ? stEd.faces.length : 0;
     const hint = 'Drag · pinch or use the corner ↻ to resize & turn';
+    const loadingFaces = PBFace.status === 'loading' || PBFace.status === 'idle';
+    $('stFaceBar').hidden = !(stEd.getFaces && loadingFaces);
+    $('stFaceBar').firstChild.style.width = Math.round(PBFace.progress * 100) + '%';
     $('stSub').textContent = !stEd.getFaces || PBFace.status === 'failed' ? hint
-      : !stEd.faces || PBFace.status === 'loading' ? 'Looking for faces…'
+      : loadingFaces ? `⏳ Getting face tracking ready… ${Math.round(PBFace.progress * 100)}% · stickers work now`
+      : !stEd.faces ? '🔍 Looking for faces…'
       : n ? `🙂 ${n} face${n === 1 ? '' : 's'} · props stick on`
       : 'No faces found · drag props into place';
   }
@@ -2553,12 +2557,20 @@
   }
 
   async function makeVideo(m, clip, mirror) {
-    if (state.vstickers.some(st => st.face)) await PBFace.load();
     const comp = videoComposer();
     const wrap = $('makingWrap'); wrap.innerHTML = ''; wrap.appendChild(comp.out);
     $('makingTitle').textContent = `Making your ${plain(m.label).toLowerCase()}…`;
     $('making').hidden = false; syncScroll();
     const pct = (p) => { $('makingPct').textContent = Math.round(Math.min(1, p) * 100) + '%'; };
+    if (state.vstickers.some(st => st.face) && !PBFace.ready()) {
+      // props that follow faces need the face finder; show its download instead of a frozen 0%
+      const title = $('makingTitle').textContent;
+      $('makingTitle').textContent = 'Getting face tracking ready…';
+      const off = setInterval(() => pct(PBFace.progress), 200);
+      await PBFace.load();
+      clearInterval(off);
+      $('makingTitle').textContent = title; pct(0);
+    }
     try {
       if (clip.frames) {
         // Boomerang: forward + backward, looped. Strobe: each frame held briefly with a white flash between.
@@ -2702,12 +2714,24 @@
   });
 
   // ================= start =================
+  PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); });
   loadSettings();
   buildThemes();
   buildEmojis();
   syncUI();
   buildFilterTiles();
   render();
+
+  $('boot').remove();
+
+  // Face tracking is ~12 MB, so it downloads quietly in the background once the app is up (skipped when
+  // the phone asks to save data — it then loads when someone opens the sticker studio). Everything
+  // else works while it downloads; face props just start snapping on once it's ready.
+  window.addEventListener('load', () => {
+    if (navigator.connection && navigator.connection.saveData) return;
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1));
+    setTimeout(() => idle(() => PBFace.load()), 2000);
+  });
 
   // Offline support + automatic updates. The worker is scoped to this folder so it never touches other
   // apps on the same site. A new version installs in the background and takes over; the page reloads

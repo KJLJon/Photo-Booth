@@ -291,6 +291,8 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 }
 #stickerEd .ed-top button { background: rgba(255,255,255,.14); color: #fff; }
 #stickerEd .ed-top button.primary { background: linear-gradient(120deg, var(--accent2), var(--accent)); }
+.dlbar { height: 4px; background: rgba(255,255,255,.12); margin: 0 14px; border-radius: 4px; overflow: hidden; }
+.dlbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .3s; }
 #stCanvas { flex: 1 1 auto; width: 100%; min-height: 0; touch-action: none; }
 .st-panel { background: #1a1029; padding: 4px 0 6px; }
 .st-tools { display: flex; gap: 6px; padding: 4px 10px; overflow-x: auto; scrollbar-width: none; }
