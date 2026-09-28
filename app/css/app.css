@@ -198,6 +198,7 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .sheet .hint { font-size: .9rem; color: var(--ink); background: #faf5ff; border-radius: 10px; padding: 8px 10px; margin-top: 10px; }
 .sheet a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 .save-modes { justify-content: center; margin-bottom: 10px; flex-wrap: nowrap; }
+.save-modes.music { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; margin: 10px 0 0; scrollbar-width: none; }
 .save-modes .chip { padding: 7px 12px; font-size: .85rem; }
 .save-picks { display: flex; gap: 8px; justify-content: center; margin-top: 8px; overflow-x: auto; }
 .save-picks button { flex: none; padding: 0; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 3px solid transparent; background: none; }

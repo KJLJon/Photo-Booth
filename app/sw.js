@@ -16,6 +16,7 @@ const ASSETS = [
   './js/encoders.js',
   './js/face.js',
   './js/lib/qrcode.js',
+  './js/music.js',
   './js/emoji-data.js',
   './js/app.js',
   './stickers/stickers.js'

@@ -591,14 +591,14 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none'
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -2606,11 +2606,16 @@
   }
   function camError(msg) { $('camErrorMsg').textContent = msg; $('camError').hidden = false; }
 
+  // one shared audio context, first created on a tap (phones only allow sound after one)
+  function audioCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) throw new Error('no audio');
+    cam.audio = cam.audio || new AC();
+    if (cam.audio.state === 'suspended') cam.audio.resume();
+    return cam.audio;
+  }
   function beep(freq, dur, vol) {
     try {
-      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      cam.audio = cam.audio || new AC();
-      const a = cam.audio; if (a.state === 'suspended') a.resume();
+      const a = audioCtx();
       const o = a.createOscillator(), g = a.createGain();
       o.frequency.value = freq;
       g.gain.setValueAtTime(vol || .12, a.currentTime);
@@ -3009,9 +3014,11 @@
   }
 
   // ================= video modes =================
-  function pickMime() {
+  function pickMime(withAudio) {
     if (!window.MediaRecorder) return null;
-    for (const t of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+    const list = withAudio ? ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      : ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for (const t of list) {
       try { if (MediaRecorder.isTypeSupported(t)) return t; } catch (e) { /* ignore */ }
     }
     return '';
@@ -3165,7 +3172,18 @@
     return comp;
   }
   async function recordCanvas(cv, fps, run) {
-    const stream = cv.captureStream(fps), mime = pickMime();
+    const stream = cv.captureStream(fps);
+    // background music, synthesized and mixed straight into the recording
+    let song = null, ac = null;
+    if (state.music && state.music !== 'none' && window.PBMusic) {
+      try {
+        ac = audioCtx();
+        const dest = ac.createMediaStreamDestination();
+        song = PBMusic.play(ac, dest, state.music);
+        stream.addTrack(dest.stream.getAudioTracks()[0]);
+      } catch (e) { song = null; }
+    }
+    const mime = pickMime(!!song);
     const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6e6 } : undefined);
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -3174,6 +3192,7 @@
     await run();
     await sleep(150);
     rec.stop(); await stopped;
+    if (song) song.stop();
     stream.getTracks().forEach(t => t.stop());
     return new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' });
   }
@@ -3286,8 +3305,16 @@
     const ext = /mp4/.test(res.blob.type) ? 'mp4' : 'webm';
     vid = { url: URL.createObjectURL(res.blob), gif: res.gif, gifDelay: res.gifDelay, name: `photobooth-${m.id}-${stamp()}` };
     vid.file = new File([res.blob], `${vid.name}.${ext}`, { type: res.blob.type || 'video/' + ext });
-    const v = $('outVideo'); v.src = vid.url; v.play().catch(() => {});
+    // with music, try to play it with sound (browsers may insist on muted until the next tap)
+    const v = $('outVideo'); v.src = vid.url; v.muted = !state.music || state.music === 'none';
+    v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
     $('vidDl').href = vid.url; $('vidDl').download = vid.file.name;
+    chipGroup($('vidMusic'), PBMusic.TUNES, t => (state.music || 'none') === t.id, async t => {
+      if (state.music === t.id) return;
+      try { audioCtx(); } catch (e) { /* no audio here */ }
+      state.music = t.id; saveSettings();
+      closeVideoSheet(); await buildVideo();
+    });
     chipGroup($('vidModes'), [{ v: false, label: '🎉 Booth design' }, { v: true, label: '🎥 Just the video' }],
       o => !!state.vplain === o.v, async o => {
         if (!!state.vplain === o.v) return;
