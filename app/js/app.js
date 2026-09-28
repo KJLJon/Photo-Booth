@@ -591,14 +591,14 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: ''
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -613,6 +613,7 @@
       if (state.frame === 'none') { state.frame = 'white'; state.frameSize = 0; }
       if (!FONTS[state.font]) state.font = 'playful';
       if (state.theme === 'photo') state.theme = 'confetti'; // background photo isn't stored
+      if (state.bgSwap === 'custom') state.bgSwap = 'none';  // nor is the swap picture
     } catch (e) { /* storage unavailable */ }
   }
   function saveSettings() {
@@ -740,10 +741,117 @@
   function photoSource(p) {
     if (p.raw) return p.canvas;
     const id = p.filter || state.filter, adj = state.adj, key = id + '|' + JSON.stringify(adj);
-    if ((!id || id === 'none') && !PBFilters.hasAdj(adj)) return p.canvas;
-    if (!p._f || p._f.key !== key) p._f = { key, canvas: PBFilters.apply(p.canvas, id, null, adj) };
-    return p._f.canvas;
+    let out = p.canvas;
+    if ((id && id !== 'none') || PBFilters.hasAdj(adj)) {
+      if (!p._f || p._f.key !== key) p._f = { key, canvas: PBFilters.apply(p.canvas, id, null, adj) };
+      out = p._f.canvas;
+    }
+    return swapBackground(p, out, key);
   }
+
+  // ================= background swap =================
+  // People are cut out with MediaPipe's selfie segmenter and put in front of a new scene.
+  const SCENES = [
+    { id: 'none', label: '🖼️ Original' }, { id: 'blur', label: '💨 Blur' }, { id: 'booth', label: '🎉 Booth design' },
+    { id: 'beach', label: '🏖️ Beach' }, { id: 'space', label: '🚀 Space' }, { id: 'disco', label: '🪩 Disco' },
+    { id: 'rainbow', label: '🌈 Rainbow' }, { id: 'studio', label: '📷 Studio' }, { id: 'custom', label: '🖼️ Your picture' }
+  ];
+  let swapImage = null, swapImageId = 0;
+  function lin(ctx, y0, y1, stops) { const g = ctx.createLinearGradient(0, y0, 0, y1); stops.forEach(([o, c]) => g.addColorStop(o, c)); return g; }
+  function drawScene(ctx, w, h, id, src) {
+    const r = mulberry32(state.seed + 5);
+    if (id === 'blur') {
+      // tiny copy stretched back up = a soft blur that works in every browser
+      const t = document.createElement('canvas'); t.width = Math.max(1, Math.round(w / 24)); t.height = Math.max(1, Math.round(h / 24));
+      t.getContext('2d').drawImage(src, 0, 0, t.width, t.height);
+      ctx.imageSmoothingQuality = 'high'; ctx.drawImage(t, 0, 0, w, h);
+    } else if (id === 'booth') {
+      THEMES[state.theme].draw(ctx, w, h, themeRng(state.theme + 'swap'));
+    } else if (id === 'custom' && swapImage) {
+      const k = Math.max(w / swapImage.width, h / swapImage.height), dw = swapImage.width * k, dh = swapImage.height * k;
+      ctx.drawImage(swapImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    } else if (id === 'beach') {
+      ctx.fillStyle = lin(ctx, 0, h * .62, [[0, '#4fb3ff'], [1, '#bfe6ff']]); ctx.fillRect(0, 0, w, h * .62);
+      ctx.fillStyle = '#fff3a8'; ctx.beginPath(); ctx.arc(w * .78, h * .2, Math.min(w, h) * .09, 0, 7); ctx.fill();
+      ctx.fillStyle = lin(ctx, h * .55, h * .75, [[0, '#1c8fd6'], [1, '#48c1e8']]); ctx.fillRect(0, h * .55, w, h * .2);
+      ctx.fillStyle = lin(ctx, h * .72, h, [[0, '#f7dc9c'], [1, '#e9c27a']]); ctx.fillRect(0, h * .72, w, h * .28);
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = Math.max(2, h * .006);
+      for (let i = 0; i < 6; i++) { const y = h * (.58 + i * .025); ctx.beginPath(); ctx.moveTo(w * r(), y); ctx.lineTo(w * r(), y); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(255,255,255,.95)';
+      for (let i = 0; i < 3; i++) cloud(ctx, w * (.08 + .22 * i + r() * .06), h * (.07 + r() * .14), Math.min(w, h) * .05);
+    } else if (id === 'space') {
+      ctx.fillStyle = lin(ctx, 0, h, [[0, '#07031a'], [.6, '#1b0b45'], [1, '#3a1070']]); ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 260; i++) { ctx.fillStyle = `rgba(255,255,255,${.3 + r() * .7})`; ctx.fillRect(w * r(), h * r(), 1 + r() * 2.5, 1 + r() * 2.5); }
+      const R = Math.min(w, h) * .16;
+      const g = ctx.createRadialGradient(w * .2 - R * .3, h * .75 - R * .3, R * .2, w * .2, h * .75, R);
+      g.addColorStop(0, '#ffb86b'); g.addColorStop(1, '#c2410c'); ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(w * .2, h * .75, R, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,220,180,.8)'; ctx.lineWidth = R * .08;
+      ctx.beginPath(); ctx.ellipse(w * .2, h * .75, R * 1.6, R * .35, -.3, 0, 7); ctx.stroke();
+    } else if (id === 'disco') {
+      ctx.fillStyle = lin(ctx, 0, h, [[0, '#1a0633'], [1, '#4a0d67']]); ctx.fillRect(0, 0, w, h);
+      const cols = ['#ff5fa2', '#7ad7ff', '#ffd23f', '#8ac926', '#b388ff'];
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 7; i++) {
+        ctx.fillStyle = cols[i % cols.length] + '40'; ctx.beginPath();
+        ctx.moveTo(w / 2, 0); const a = -1.2 + i * .4;
+        ctx.lineTo(w / 2 + Math.sin(a - .07) * h * 1.5, Math.cos(a - .07) * h * 1.5); ctx.lineTo(w / 2 + Math.sin(a + .07) * h * 1.5, Math.cos(a + .07) * h * 1.5); ctx.fill();
+      }
+      for (let i = 0; i < 70; i++) { ctx.fillStyle = cols[i % cols.length] + 'aa'; ctx.beginPath(); ctx.arc(w * r(), h * r(), 2 + r() * Math.min(w, h) * .012, 0, 7); ctx.fill(); }
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (id === 'rainbow') {
+      ctx.fillStyle = lin(ctx, 0, h, [[0, '#fff1f7'], [1, '#e8f4ff']]); ctx.fillRect(0, 0, w, h);
+      const cols = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93'], R = Math.max(w, h) * .75, lw = R * .07;
+      ctx.lineWidth = lw; cols.forEach((c, i) => { ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(w / 2, h * 1.05, R - i * lw, Math.PI, 0); ctx.stroke(); });
+    } else {
+      const g = ctx.createRadialGradient(w / 2, h * .4, Math.min(w, h) * .1, w / 2, h * .5, Math.max(w, h) * .8);
+      g.addColorStop(0, '#9aa3b5'); g.addColorStop(1, '#2d3240'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    }
+  }
+  // person (from `src`, already filtered) in front of the chosen scene; `mask` is the person cut-out
+  function composeSwap(src, mask, out) {
+    const w = src.width, h = src.height;
+    out = out || document.createElement('canvas');
+    if (out.width !== w || out.height !== h) { out.width = w; out.height = h; }
+    const ctx = out.getContext('2d');
+    ctx.globalCompositeOperation = 'source-over';
+    drawScene(ctx, w, h, state.bgSwap, src);
+    const person = composeSwap.tmp || (composeSwap.tmp = document.createElement('canvas'));
+    person.width = w; person.height = h;
+    const pc = person.getContext('2d');
+    pc.drawImage(src, 0, 0);
+    pc.globalCompositeOperation = 'destination-in'; pc.imageSmoothingQuality = 'high';
+    pc.drawImage(mask, 0, 0, w, h);
+    pc.globalCompositeOperation = 'source-over';
+    ctx.drawImage(person, 0, 0);
+    return out;
+  }
+  function swapBackground(p, src, key) {
+    const id = state.bgSwap;
+    if (!id || id === 'none' || (id === 'custom' && !swapImage)) return src;
+    if (p._mask === undefined) {
+      p._mask = null;                                            // working on it
+      PBFace.loadSegmenter().then(ok => { p._mask = ok ? PBFace.personMask(p.canvas) : false; schedule(); });
+    }
+    if (!p._mask) return src;
+    const k = [key, id, state.theme, state.seed, swapImageId].join('|');
+    if (!p._sw || p._sw.key !== k) p._sw = { key: k, canvas: composeSwap(src, p._mask) };
+    return p._sw.canvas;
+  }
+  function buildSwapChips() {
+    chipGroup($('swapChips'), SCENES, s => state.bgSwap === s.id, s => {
+      if (s.id === 'custom' && !swapImage) { $('swapFile').click(); return; }
+      state.bgSwap = s.id; buildSwapChips(); schedule();
+      if (s.id !== 'none') { PBFace.loadSegmenter(); toast('✂️ Cutting people out… (first time downloads the tools)'); }
+    });
+    $('swapNote').textContent = state.bgSwap !== 'none' && PBFace.status === 'loading' ? `Getting ready… ${Math.round(PBFace.progress * 100)}%` : '';
+  }
+  $('swapFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try { const p = await loadFile(f, 1800); swapImage = p.canvas; swapImageId++; state.bgSwap = 'custom'; buildSwapChips(); schedule(); PBFace.loadSegmenter(); }
+    catch (err) { toast("Couldn't open that picture"); }
+  });
 
   // ================= drawing =================
   const EDGE_COLORS = FRAME_COLORS;
@@ -2991,6 +3099,8 @@
     const holder = { canvas: frame, zoom: 1, cx: null, cy: null, raw: true };
     const jit = { deg: 0, dx: 0, dy: 0 };
     const faceCache = new WeakMap();   // boomerang frames repeat, so find their faces once
+    const maskCache = new WeakMap(), swapOut = document.createElement('canvas');
+    const swapOn = () => state.bgSwap !== 'none' && !(state.bgSwap === 'custom' && !swapImage) && PBFace.segReady();
     const comp = {
       out, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
       track: new Map(), raw: null,
@@ -3014,7 +3124,13 @@
           raw = !(src instanceof HTMLVideoElement) && faceCache.get(src);
           if (!raw) { raw = PBFace.detect(frame) || []; if (!(src instanceof HTMLVideoElement)) faceCache.set(src, raw); }
         }
+        let mask = null;
+        if (swapOn()) {
+          mask = !(src instanceof HTMLVideoElement) && maskCache.get(src);
+          if (!mask) { mask = PBFace.personMask(frame); if (mask && !(src instanceof HTMLVideoElement)) maskCache.set(src, mask); }
+        }
         PBFilters.applyFrame(fctx, w, h, state.filter, state.adj);
+        if (mask) { composeSwap(frame, mask, swapOut); fctx.drawImage(swapOut, 0, 0); }
         if (plain) {
           const T = photoXform(holder, L.rects[0], jit, L.border);
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
@@ -3081,6 +3197,12 @@
     $('makingTitle').textContent = `Making your ${plain(m.label).toLowerCase()}…`;
     $('making').hidden = false; syncScroll();
     const pct = (p) => { $('makingPct').textContent = Math.round(Math.min(1, p) * 100) + '%'; };
+    if (state.bgSwap !== 'none' && !PBFace.segReady()) {
+      $('makingTitle').textContent = 'Getting the background swap ready…';
+      const off = setInterval(() => pct(PBFace.progress), 200);
+      await PBFace.loadSegmenter();
+      clearInterval(off); pct(0);
+    }
     if (state.vstickers.some(st => st.face) && !PBFace.ready()) {
       // props that follow faces need the face finder; show its download instead of a frozen 0%
       const title = $('makingTitle').textContent;
@@ -3240,9 +3362,9 @@
   });
 
   // ================= start =================
-  PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); });
+  PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); buildSwapChips(); });
   loadSettings();
-  syncAdj(); buildDesigns();
+  syncAdj(); buildDesigns(); buildSwapChips();
   buildThemes();
   buildEmojis();
   syncUI();

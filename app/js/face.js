@@ -7,15 +7,17 @@
   const MP_VERSION = '1.0.1';
   const LOCAL = new URL(`vendor/mediapipe-${MP_VERSION}/`, document.baseURI).href;
   const SOURCES = [
-    { lib: LOCAL + 'vision_bundle.mjs', wasm: LOCAL + 'wasm', model: LOCAL + 'blaze_face_short_range.tflite' },
+    { lib: LOCAL + 'vision_bundle.mjs', wasm: LOCAL + 'wasm', model: LOCAL + 'blaze_face_short_range.tflite', seg: LOCAL + 'selfie_segmenter.tflite' },
     {
       lib: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/vision_bundle.mjs`,
       wasm: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`,
-      model: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite'
+      model: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+      seg: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite'
     }
   ];
 
   let detector = null, loading = null, status = 'idle', progress = 0;
+  let lib = null;                     // { mp, fileset, src } once loaded, reused by the background cutter
   const listeners = [], progressFns = [];
   const setProgress = (p) => { progress = p; progressFns.forEach(fn => { try { fn(p); } catch (e) { /* ignore */ } }); };
 
@@ -48,17 +50,17 @@
       fetchBytes(files.wasmBinaryPath, n => { got.wasm = Math.min(n, SIZES.wasm); tick(); }),
       fetchBytes(src.model, n => { got.model = Math.min(n, SIZES.model); tick(); })
     ]);
+    // kept for the life of the page: the background cutter (below) starts another copy of the runtime from it
     const wasmUrl = URL.createObjectURL(new Blob([wasm], { type: 'application/wasm' }));
     const fileset = { ...files, wasmBinaryPath: wasmUrl };
+    lib = { mp, fileset, src };
     const opts = (delegate) => ({
       baseOptions: { modelAssetBuffer: model, delegate },
       runningMode: 'IMAGE', minDetectionConfidence: 0.5, minSuppressionThreshold: 0.3
     });
-    try {
-      try { return await mp.FaceDetector.createFromOptions(fileset, opts('GPU')); } catch (e) {
-        return await mp.FaceDetector.createFromOptions(fileset, opts('CPU'));
-      }
-    } finally { setTimeout(() => URL.revokeObjectURL(wasmUrl), 10000); }
+    try { return await mp.FaceDetector.createFromOptions(fileset, opts('GPU')); } catch (e) {
+      return await mp.FaceDetector.createFromOptions(fileset, opts('CPU'));
+    }
   }
 
   // Resolves true once faces can be found, false if face tracking isn't available here.
@@ -117,7 +119,53 @@
     };
   }
 
+  // ---- cutting people out of the background (MediaPipe selfie segmenter, ~250 KB more) ----
+  let segmenter = null, segLoading = null;
+  function loadSegmenter() {
+    if (segLoading) return segLoading;
+    segLoading = (async () => {
+      if (!(await load()) || !lib) return false;
+      try {
+        const model = await fetchBytes(lib.src.seg, () => {});
+        const opts = (delegate) => ({ baseOptions: { modelAssetBuffer: model, delegate }, runningMode: 'IMAGE',
+          outputConfidenceMasks: true, outputCategoryMask: false });
+        try { segmenter = await lib.mp.ImageSegmenter.createFromOptions(lib.fileset, opts('GPU')); } catch (e) {
+          segmenter = await lib.mp.ImageSegmenter.createFromOptions(lib.fileset, opts('CPU'));
+        }
+        return true;
+      } catch (e) { console.warn('Background cutter failed to load', e); segLoading = null; return false; }
+    })();
+    return segLoading;
+  }
+  // Returns a small canvas whose alpha is "how much this pixel is a person" (stretch it over the source).
+  const segTmp = document.createElement('canvas');
+  function personMask(source) {
+    if (!segmenter) return null;
+    const w0 = source.videoWidth || source.width, h0 = source.videoHeight || source.height;
+    if (!w0 || !h0) return null;
+    const k = Math.min(1, 512 / Math.max(w0, h0)), w = Math.round(w0 * k), h = Math.round(h0 * k);
+    segTmp.width = w; segTmp.height = h;
+    segTmp.getContext('2d').drawImage(source, 0, 0, w, h);
+    let res;
+    try { res = segmenter.segment(segTmp); } catch (e) { console.warn('Background cutter failed', e); return null; }
+    try {
+      const m = res.confidenceMasks && res.confidenceMasks[0];
+      if (!m) return null;
+      const f = m.getAsFloat32Array(), mw = m.width, mh = m.height;
+      const out = document.createElement('canvas'); out.width = mw; out.height = mh;
+      const ctx = out.getContext('2d'), img = ctx.createImageData(mw, mh), d = img.data;
+      for (let i = 0; i < f.length; i++) {
+        // sharpen the edge a little so hair and shoulders don't look ghostly
+        const a = Math.min(1, Math.max(0, (f[i] - 0.25) / 0.5));
+        d[i * 4 + 3] = a * 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      return out;
+    } finally { if (res.close) res.close(); }
+  }
+
   window.PBFace = {
+    loadSegmenter, personMask, segReady: () => !!segmenter,
     load, detect, pose,
     get status() { return status; },
     get progress() { return progress; },
