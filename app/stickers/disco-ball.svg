@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="180" viewBox="0 0 150 180">
+<path d="M75 0 V30" stroke="#666" stroke-width="4"/>
+<defs><clipPath id="c"><circle cx="75" cy="102" r="70"/></clipPath><radialGradient id="s" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#c7cbe0"/><stop offset="1" stop-color="#5d6380"/></radialGradient></defs>
+<circle cx="75" cy="102" r="70" fill="url(#s)"/>
+<g clip-path="url(#c)" stroke="#5d6380" stroke-width="2" fill="none"><path d="M0 52 H150 M0 72 H150 M0 92 H150 M0 112 H150 M0 132 H150 M0 152 H150"/>
+<path d="M75 30 V174 M50 30 Q30 102 50 174 M100 30 Q120 102 100 174 M28 40 Q-4 102 28 164 M122 40 Q154 102 122 164"/></g>
+<g fill="#fff"><rect x="52" y="62" width="14" height="8" opacity=".9"/><rect x="80" y="84" width="14" height="8" opacity=".6"/><rect x="104" y="124" width="12" height="8" opacity=".5"/></g>
+<g fill="#ff5fa2"><rect x="30" y="104" width="12" height="8"/></g><g fill="#7ad7ff"><rect x="96" y="104" width="12" height="8"/><rect x="58" y="142" width="12" height="8"/></g>
+<circle cx="75" cy="102" r="70" fill="none" stroke="#3d4260" stroke-width="4"/>
+<path d="M126 36 l4 -12 l4 12 l12 4 l-12 4 l-4 12 l-4 -12 l-12 -4Z" fill="#ffd23f"/>
+</svg>

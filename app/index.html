@@ -230,7 +230,7 @@
   </div>
 </main>
 <div id="toast"></div>
-<div id="updateBar" hidden><span>✨ New version ready</span><button type="button" class="primary" id="updateBtn">Update</button></div>
+<div id="updateBar" hidden><span>✨ Updated! Reload when ready</span><button type="button" class="primary" id="updateBtn">Reload</button></div>
 
 <div id="photoMenu" class="overlay" hidden>
   <div class="sheet">
@@ -322,24 +322,39 @@
     <button id="stClear" type="button">🗑 Clear</button>
     <div style="text-align:center">
       <div class="title">Stickers &amp; props</div>
-      <div class="sub" id="stSub">Drag · pinch to resize &amp; turn</div>
+      <div class="sub" id="stSub">Drag · pinch or use the corner ↻ to resize &amp; turn</div>
     </div>
     <button id="stDone" type="button" class="primary">✓ Done</button>
   </div>
   <canvas id="stCanvas"></canvas>
-  <div class="st-tools" id="stTools" hidden>
-    <button type="button" id="stSmaller" aria-label="Smaller">➖</button>
-    <button type="button" id="stBigger" aria-label="Bigger">➕</button>
-    <button type="button" id="stRotL" aria-label="Rotate left">↺</button>
-    <button type="button" id="stRotR" aria-label="Rotate right">↻</button>
-    <button type="button" id="stFlip" aria-label="Flip">⇋</button>
-    <button type="button" id="stFront" aria-label="Bring to front">⬆</button>
-    <button type="button" id="stAttach" aria-label="Stick to face" title="Stick to face" aria-pressed="false">🔗</button>
-    <button type="button" id="stEveryone" aria-label="Put on every face" title="Put on every face">👥</button>
-    <button type="button" id="stDelete" class="danger" aria-label="Delete">🗑</button>
+  <div class="st-panel" id="stTools" hidden>
+    <div class="st-tools">
+      <button type="button" id="stSmaller" aria-label="Smaller" title="Smaller">➖</button>
+      <button type="button" id="stBigger" aria-label="Bigger" title="Bigger">➕</button>
+      <button type="button" id="stRotL" aria-label="Turn left" title="Turn left">↺</button>
+      <button type="button" id="stRotR" aria-label="Turn right" title="Turn right">↻</button>
+      <button type="button" id="stFlip" aria-label="Flip" title="Flip">⇋</button>
+      <button type="button" id="stEdit" aria-label="Change the words" title="Change the words" hidden>✏️</button>
+      <button type="button" id="stFront" aria-label="Bring to front" title="Bring to front">⬆</button>
+      <button type="button" id="stDupe" aria-label="Duplicate" title="Duplicate">⧉</button>
+      <button type="button" id="stAttach" aria-label="Stick to face" title="Stick to face" aria-pressed="false">🔗</button>
+      <button type="button" id="stEveryone" aria-label="Put on every face" title="Put on every face">👥</button>
+      <button type="button" id="stDelete" class="danger" aria-label="Delete" title="Delete">🗑</button>
+    </div>
+    <div class="st-style">
+      <div class="st-row"><span class="lbl">Outline</span><div class="swatches" id="stBorders"></div></div>
+      <div id="stTextRow" hidden>
+        <div class="st-row"><span class="lbl">Color</span><div class="swatches" id="stColors"></div></div>
+        <div class="st-row"><span class="lbl">Font</span><div class="chips" id="stFonts"></div></div>
+      </div>
+    </div>
   </div>
   <div class="st-tray">
     <div class="chips st-tabs" id="stTabs"></div>
+    <div class="st-cats" id="stCats" hidden>
+      <input type="search" id="stSearch" placeholder="Search emoji" autocomplete="off" enterkeyhint="search">
+      <div class="chips" id="stCatChips"></div>
+    </div>
     <div class="st-items" id="stItems"></div>
   </div>
 </div>
@@ -379,6 +394,8 @@
 
 <script src="js/filters.js"></script>
 <script src="js/props.js"></script>
+<script src="stickers/stickers.js"></script>
+<script src="js/emoji-data.js"></script>
 <script src="js/encoders.js"></script>
 <script src="js/face.js"></script>
 <script src="js/app.js"></script>

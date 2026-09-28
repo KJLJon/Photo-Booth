@@ -15,19 +15,26 @@ const ASSETS = [
   './js/props.js',
   './js/encoders.js',
   './js/face.js',
-  './js/app.js'
+  './js/emoji-data.js',
+  './js/app.js',
+  './stickers/stickers.js'
 ];
+// every SVG sticker, so the whole pack works offline
+importScripts('./stickers/stickers.js');
+(self.PBStickers || []).forEach((st) => ASSETS.push(`./stickers/${st.id}.svg`));
 // Face-tracking files are large (the WASM runtime is ~11 MB) so they aren't pre-cached;
 // they go in their own cache the first time someone uses face props, and survive app updates
 // (their folder name carries the library version, so a new version is a new URL).
 const VENDOR = PREFIX + 'vendor';
 const SCOPE = new URL('./', self.location).pathname;
 
+// Updates install in the background and take over straight away; the page reloads itself when
+// that's safe (see app.js), so people always end up on the newest version.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))));
+  e.waitUntil(caches.open(CACHE)
+    .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
-
-self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.skipWaiting(); });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(

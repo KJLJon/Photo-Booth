@@ -1536,17 +1536,91 @@
   function queueFilterThumbs() { clearTimeout(thumbTimer); thumbTimer = setTimeout(buildFilterTiles, 120); }
 
   // ================= stickers & props =================
+  // Kinds: prop (clip art drawn in code, js/props.js), svg (stickers/<id>.svg), emoji and text.
+  // A sticker's "unit" is st.s × min(W, H) pixels; stickerBox gives its width and height in units.
+  // st.border is the die-cut outline colour ('' = none).
+  const TEXT_SIZE = 0.4, BORDER_W = 0.055;
+  const svgImgs = {};
+  function svgImage(id) {
+    let im = svgImgs[id];
+    if (!im) {
+      im = svgImgs[id] = new Image();
+      im.onload = () => { schedule(); if (!$('stickerEd').hidden) drawStEd(); };
+      im.src = 'stickers/' + id + '.svg';
+    }
+    return im.complete && im.naturalWidth ? im : null;
+  }
+  const measureCtx = document.createElement('canvas').getContext('2d');
+  function textFont(st, px) { const F = FONTS[st.font] || FONTS.playful; return `${F.main} ${px}px ${F.fam}`; }
+  function stickerBox(st) {
+    if (st.kind === 'emoji') return { w: 1, h: 1 };
+    if (st.kind === 'svg') { const im = svgImage(st.id); return { w: 1, h: im ? im.naturalHeight / im.naturalWidth : 1 }; }
+    if (st.kind === 'text') {
+      measureCtx.font = textFont(st, 100);
+      return { w: Math.max(.2, measureCtx.measureText(st.text || ' ').width / 100 * TEXT_SIZE), h: TEXT_SIZE * 1.3 };
+    }
+    return { w: 1, h: PBProps.height(st.id) };
+  }
+  function stickerFit(st) {
+    if (st.kind === 'svg') { const d = (self.PBStickers || []).find(x => x.id === st.id); return d && d.face || null; }
+    return PBProps.fit(st.kind, st.id);
+  }
+  function borderOf(st) { return st.border != null ? st.border : (st.kind === 'emoji' ? '#ffffff' : ''); }
+  // draws the sticker itself, centred on (0,0), `u` pixels to the unit
+  function paintSticker(c, st, u) {
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    if (st.kind === 'emoji') {
+      c.font = `${u * 0.86}px ${EMOJI}`; c.fillStyle = '#000';
+      c.fillText(st.id, 0, u * 0.04);
+    } else if (st.kind === 'svg') {
+      const im = svgImage(st.id);
+      if (im) { const h = u * im.naturalHeight / im.naturalWidth; c.drawImage(im, -u / 2, -h / 2, u, h); }
+    } else if (st.kind === 'text') {
+      c.font = textFont(st, u * TEXT_SIZE); c.fillStyle = st.color || '#ff2d87';
+      c.fillText(st.text || '', 0, u * TEXT_SIZE * 0.06);
+    } else PBProps.draw(c, st.id, u, st.text);
+  }
+  // Stickers are rendered once into a small bitmap (with their outline) and reused; sizes are
+  // rounded to 8% steps so a face-tracked sticker that grows and shrinks doesn't redraw every frame.
+  const bmCache = new Map();
+  function stickerBitmap(st, px) {
+    const q = Math.max(8, Math.round(Math.pow(1.08, Math.round(Math.log(Math.max(8, px)) / Math.log(1.08)))));
+    const border = borderOf(st);
+    const key = [st.kind, st.id, st.text, st.color, st.font, border, q].join('|');
+    let bm = bmCache.get(key);
+    if (bm) { bmCache.delete(key); bmCache.set(key, bm); return bm; }
+    if (st.kind === 'svg' && !svgImage(st.id)) return null;
+    const box = stickerBox(st), bw = border ? Math.max(1.5, q * BORDER_W) : 0, pad = Math.ceil(bw + q * 0.12 + 2);
+    const w = Math.ceil(q * box.w + 2 * pad), h = Math.ceil(q * box.h + 2 * pad);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d'); x.translate(w / 2, h / 2); paintSticker(x, st, q);
+    let out = c;
+    if (border) {
+      // outline: the sticker's silhouette stamped in a ring around it, filled with the border colour
+      out = document.createElement('canvas'); out.width = w; out.height = h;
+      const o = out.getContext('2d');
+      for (const r of [bw, bw * .6, bw * .3]) {
+        for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; o.drawImage(c, Math.cos(a) * r, Math.sin(a) * r); }
+      }
+      o.globalCompositeOperation = 'source-in'; o.fillStyle = border; o.fillRect(0, 0, w, h);
+      o.globalCompositeOperation = 'source-over'; o.drawImage(c, 0, 0);
+    }
+    bm = { c: out, q, w, h };
+    bmCache.set(key, bm);
+    if (bmCache.size > 150) bmCache.delete(bmCache.keys().next().value);
+    return bm;
+  }
   function drawSticker(ctx, st, W, H) {
     const unit = st.s * Math.min(W, H);
     ctx.save();
     ctx.translate(st.x * W, st.y * H);
     ctx.rotate(st.r || 0);
     if (st.flip) ctx.scale(-1, 1);
-    if (st.kind === 'emoji') {
-      ctx.font = `${unit * 0.86}px ${EMOJI}`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(st.id, 0, unit * 0.04);
-    } else PBProps.draw(ctx, st.id, unit, st.text);
+    if (st.kind === 'prop' && !borderOf(st)) PBProps.draw(ctx, st.id, unit, st.text);   // crisp vectors
+    else {
+      const m = ctx.getTransform(), bm = stickerBitmap(st, unit * (Math.hypot(m.a, m.b) || 1));
+      if (bm) { const k = unit / bm.q; ctx.drawImage(bm.c, -bm.w * k / 2, -bm.h * k / 2, bm.w * k, bm.h * k); }
+    }
     ctx.restore();
   }
   function curStickers() {
@@ -1681,8 +1755,8 @@
     return next;
   }
   function stickerHalf(st, W, H) {
-    const unit = st.s * Math.min(W, H);
-    return { hw: unit / 2, hh: unit * (st.kind === 'emoji' ? 1 : PBProps.height(st.id)) / 2 };
+    const unit = st.s * Math.min(W, H), b = stickerBox(st), pad = borderOf(st) ? unit * BORDER_W : 0;
+    return { hw: unit * b.w / 2 + pad, hh: unit * b.h / 2 + pad };
   }
   function hitSticker(list, px, py, W, H) {
     for (let i = list.length - 1; i >= 0; i--) {
@@ -1748,16 +1822,27 @@
       ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
       ctx.strokeStyle = '#fff'; ctx.strokeRect(-hw - 6, -hh - 6, 2 * hw + 12, 2 * hh + 12);
       ctx.strokeStyle = st.face ? '#ff5fa2' : '#8a4dff'; ctx.lineDashOffset = 5.5; ctx.strokeRect(-hw - 6, -hh - 6, 2 * hw + 12, 2 * hh + 12);
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(hw + 6, -hh - 6, 11, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = st.face ? '#ff5fa2' : '#8a4dff'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(hw + 6, -hh - 6, 5.5, -Math.PI * .9, Math.PI * .4); ctx.stroke();   // little turn arrow
     }
     ctx.restore();
     $('stTools').hidden = !st;
-    if (st) $('stAttach').setAttribute('aria-pressed', st.face ? 'true' : 'false');
+    if (st) syncStyle(st);
     const n = stEd.faces ? stEd.faces.length : 0;
-    $('stSub').textContent = !stEd.getFaces ? 'Drag · pinch to resize & turn'
-      : PBFace.status === 'failed' ? 'Drag · pinch to resize & turn'
+    const hint = 'Drag · pinch or use the corner ↻ to resize & turn';
+    $('stSub').textContent = !stEd.getFaces || PBFace.status === 'failed' ? hint
       : !stEd.faces || PBFace.status === 'loading' ? 'Looking for faces…'
       : n ? `🙂 ${n} face${n === 1 ? '' : 's'} · props stick on`
       : 'No faces found · drag props into place';
+  }
+  // the round handle at the selected sticker's top-right corner, in view coordinates
+  function handlePos() {
+    const st = stEd.list && stEd.list[stEd.sel], V = stEd.view;
+    if (!st || !V) return null;
+    const { hw, hh } = stickerHalf(st, V.w, V.h), a = st.r || 0, x = hw + 6, y = -hh - 6;
+    return { x: st.x * V.w + x * Math.cos(a) - y * Math.sin(a), y: st.y * V.h + x * Math.sin(a) + y * Math.cos(a) };
   }
   function stLocal(e) { const b = stc.getBoundingClientRect(), V = stEd.view; return { x: e.clientX - b.left - V.x, y: e.clientY - b.top - V.y }; }
   function startStG() {
@@ -1768,7 +1853,12 @@
     const g = stEd.g, st = stEd.list[stEd.sel], V = stEd.view;
     if (!g || !st) return;
     const pts = [...stEd.pts.values()];
-    if (pts.length >= 2 && g.pts.length >= 2) {
+    if (stEd.handle && pts.length === 1) {
+      const c = { x: g.st.x * V.w, y: g.st.y * V.h }, p0 = g.pts[0], p1 = pts[0];
+      const d0 = dist(c, p0);
+      if (d0 > 4) st.s = clamp(g.st.s * dist(c, p1) / d0, .03, 2.5);
+      st.r = (g.st.r || 0) + Math.atan2(p1.y - c.y, p1.x - c.x) - Math.atan2(p0.y - c.y, p0.x - c.x);
+    } else if (pts.length >= 2 && g.pts.length >= 2) {
       const d0 = dist(g.pts[0], g.pts[1]);
       if (d0 > 8) st.s = clamp(g.st.s * dist(pts[0], pts[1]) / d0, .03, 2.5);
       const a0 = Math.atan2(g.pts[1].y - g.pts[0].y, g.pts[1].x - g.pts[0].x);
@@ -1805,13 +1895,19 @@
     stc.setPointerCapture(e.pointerId);
     const pt = stLocal(e);
     stEd.pts.set(e.pointerId, pt);
-    if (stEd.pts.size === 1) stEd.sel = hitSticker(stEd.list, pt.x, pt.y, stEd.view.w, stEd.view.h);
+    stEd.handle = false;
+    if (stEd.pts.size === 1) {
+      const h = handlePos();
+      if (h && dist(pt, h) < 22) stEd.handle = true;          // corner handle: turn & resize with one finger / mouse
+      else stEd.sel = hitSticker(stEd.list, pt.x, pt.y, stEd.view.w, stEd.view.h);
+    }
     startStG(); drawStEd();
   });
   stc.addEventListener('pointermove', (e) => { if (!stEd.pts.has(e.pointerId)) return; stEd.pts.set(e.pointerId, stLocal(e)); moveStG(); });
   const stEnd = (e) => {
     if (!stEd.pts.delete(e.pointerId)) return;
     if (!stEd.pts.size && stEd.g) { refitSel(stEd.list[stEd.sel], true); drawStEd(); }
+    if (!stEd.pts.size) stEd.handle = false;
     startStG();
   };
   stc.addEventListener('pointerup', stEnd);
@@ -1819,14 +1915,18 @@
   stc.addEventListener('wheel', (e) => {
     e.preventDefault();
     const st = stEd.list[stEd.sel]; if (!st) return;
-    st.s = clamp(st.s * Math.exp(-e.deltaY * 0.002), .03, 2.5); refitSel(st, false); drawStEd();
+    if (e.shiftKey || e.altKey) st.r = (st.r || 0) + (e.deltaY || e.deltaX) * 0.004;   // shift + scroll turns
+    else st.s = clamp(st.s * Math.exp(-e.deltaY * 0.002), .03, 2.5);
+    refitSel(st, false); drawStEd();
   }, { passive: false });
   window.addEventListener('resize', () => requestAnimationFrame(drawStEd));
 
   function addSticker(st) {
     st.x = 0.5 + (Math.random() - .5) * .16; st.y = 0.4 + (Math.random() - .5) * .16;
     st.r = 0; st.flip = false; st.s = st.s || .34;
-    const fit = PBProps.fit(st.kind, st.id), faces = stEd.faces;
+    const fit = stickerFit(st), faces = stEd.faces;
+    // stickers get a white die-cut outline, except things that sit on a face (glasses with a white rim look odd)
+    if (st.border == null) st.border = st.kind === 'prop' || fit ? '' : '#ffffff';
     if (fit && faces && faces.length) {
       // snap onto the face that has the fewest of this prop so far
       const count = (f) => stEd.list.filter(o => o.face && o.id === st.id && o.face.slot === f.slot && o.face.idx === f.idx).length;
@@ -1853,7 +1953,7 @@
     const st = stEd.list[stEd.sel]; if (!st) return;
     const W = stEd.base.width, H = stEd.base.height, faces = stEd.faces || [];
     if (!faces.length) { noFacesMsg(); return; }
-    if (!st.face) attachTo(st, nearestFace(st, faces, W, H).f, PBProps.fit(st.kind, st.id), W, H);
+    if (!st.face) attachTo(st, nearestFace(st, faces, W, H).f, stickerFit(st), W, H);
     const has = (f) => stEd.list.some(o => o.face && o.id === st.id && o.text === st.text && o.face.slot === f.slot && o.face.idx === f.idx);
     let added = 0;
     faces.forEach(f => {
@@ -1875,6 +1975,13 @@
     const i = stEd.sel; if (i < 0) return;
     const [st] = stEd.list.splice(i, 1); stEd.list.push(st); stEd.sel = stEd.list.length - 1; drawStEd();
   });
+  $('stDupe').addEventListener('click', () => {
+    const st = stEd.list[stEd.sel]; if (!st) return;
+    const c = JSON.parse(JSON.stringify(st));
+    delete c.face;                                             // the copy is free to go anywhere
+    c.x = clamp(c.x + .05, 0, 1); c.y = clamp(c.y + .05, 0, 1);
+    stEd.list.push(c); stEd.sel = stEd.list.length - 1; drawStEd();
+  });
   $('stDelete').addEventListener('click', () => { if (stEd.sel < 0) return; stEd.list.splice(stEd.sel, 1); stEd.sel = -1; drawStEd(); });
   $('stClear').addEventListener('click', () => {
     if (!stEd.list.length || !confirm('Remove all stickers?')) return;
@@ -1889,26 +1996,107 @@
     x.translate(56, 56); PBProps.draw(x, id, unit, text);
     return c;
   }
+  function svgIcon(id) {
+    const im = document.createElement('img'); im.src = 'stickers/' + id + '.svg'; im.alt = ''; im.draggable = false;
+    svgImage(id);                                              // warm the cache so it draws straight away
+    return im;
+  }
+  const STICKER_TABS = [{ id: 'props', label: '🎩 Props' }, { id: 'fun', label: '🤪 Fun' }, { id: 'words', label: '🔤 Text' }, { id: 'emoji', label: '😀 Emoji' }];
+  let emojiCat = 0, emojiQuery = '';
+  function emojiList() {
+    const D = window.PBEmojiData || [];
+    const split = (g) => g.list.split('\t').map(x => { const i = x.indexOf(' '); return { e: x.slice(0, i), n: x.slice(i + 1) }; });
+    if (emojiQuery) {
+      const q = emojiQuery.toLowerCase();
+      return D.flatMap(split).filter(x => x.n.includes(q)).slice(0, 300);
+    }
+    return D[emojiCat] ? split(D[emojiCat]) : PBProps.EMOJI.map(e => ({ e, n: '' }));
+  }
   function buildStickerTray() {
-    const tabs = [{ id: 'props', label: '🎩 Props' }, { id: 'words', label: '💬 Words' }, { id: 'emoji', label: '😀 Emoji' }];
-    chipGroup($('stTabs'), tabs, t => stEd.tab === t.id, t => { stEd.tab = t.id; buildStickerTray(); });
-    const el = $('stItems'); el.innerHTML = ''; el.scrollLeft = 0;
-    const add = (content, onClick, cls) => {
+    chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; buildStickerTray(); });
+    const el = $('stItems'); el.innerHTML = ''; el.scrollLeft = 0; el.scrollTop = 0;
+    el.classList.toggle('grid', stEd.tab === 'emoji');
+    const cats = $('stCats'); cats.hidden = stEd.tab !== 'emoji';
+    const add = (content, onClick, cls, title) => {
       const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls;
+      if (title) { b.title = title; b.setAttribute('aria-label', title); }
       if (typeof content === 'string') b.textContent = content; else b.appendChild(content);
       b.addEventListener('click', onClick); el.appendChild(b);
+      return b;
     };
     if (stEd.tab === 'props') {
-      PBProps.LIST.forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 })));
+      PBProps.LIST.forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name));
+    } else if (stEd.tab === 'fun') {
+      (self.PBStickers || []).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
     } else if (stEd.tab === 'words') {
-      add('✏️ Your own bubble', () => { const t = prompt('Words for the speech bubble:', 'Hooray!'); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t.slice(0, 24), s: .36 }); }, 'txt');
-      add('💥 Your own burst', () => { const t = prompt('Words for the comic burst:', 'WHOA!'); if (t) addSticker({ kind: 'prop', id: 'burst', text: t.slice(0, 16), s: .34 }); }, 'txt');
+      add('🔤 Add your own text', () => { const t = askText('Your text:', ''); if (t) addSticker({ kind: 'text', text: t, color: '#ff2d87', font: 'playful', s: .3 }); }, 'txt wide');
+      add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
+      add('💥 Your own burst', () => { const t = askText('Words for the comic burst:', 'WHOA!', 16); if (t) addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 }); }, 'txt');
       PBProps.WORDS.bubble.forEach(t => add(propIcon('bubble', t), () => addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 })));
       PBProps.WORDS.burst.forEach(t => add(propIcon('burst', t), () => addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 })));
     } else {
-      PBProps.EMOJI.forEach(e => add(e, () => addSticker({ kind: 'emoji', id: e, s: .2 })));
+      const D = window.PBEmojiData || [];
+      chipGroup($('stCatChips'), D.map((g, i) => ({ i, label: g.icon, title: g.name })), g => !emojiQuery && emojiCat === g.i,
+        g => { emojiCat = g.i; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
+      [...$('stCatChips').children].forEach((b, i) => { if (D[i]) { b.title = D[i].name; b.setAttribute('aria-label', D[i].name); } });
+      const list = emojiList();
+      if (!list.length) add('No emoji match', () => {}, 'txt wide');
+      list.forEach(x => add(x.e, () => addSticker({ kind: 'emoji', id: x.e, s: .2 }), '', x.n));
     }
   }
+  $('stSearch').addEventListener('input', (e) => { emojiQuery = e.target.value.trim(); buildStickerTray(); });
+  function askText(label, def, max) {
+    const t = prompt(label, def);
+    return t && t.trim() ? t.trim().slice(0, max || 60) : null;
+  }
+
+  // ---- style panel: outline, text colour & font ----
+  const BORDER_SWATCHES = ['', '#ffffff', '#1b1b1b', '#ff5fa2', '#ffd23f', '#3bceac', '#8a4dff'];
+  const TEXT_SWATCHES = ['#ffffff', '#1b1b1b', '#ff2d87', '#ff595e', '#ff9f1c', '#ffd23f', '#8ac926', '#1982c4', '#8a4dff'];
+  function swatches(el, colors, cur, onPick, customId) {
+    el.innerHTML = '';
+    colors.forEach(c => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'swatch' + (c ? '' : ' none');
+      if (c) b.style.background = c; else b.textContent = '⃠';
+      b.setAttribute('aria-label', c || 'No outline'); b.setAttribute('aria-pressed', String((cur || '') === c));
+      b.addEventListener('click', () => onPick(c));
+      el.appendChild(b);
+    });
+    const lab = document.createElement('label'); lab.className = 'swatch custom'; lab.title = 'Pick any colour';
+    const inp = document.createElement('input'); inp.type = 'color'; inp.id = customId;
+    inp.value = /^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#ffffff';
+    lab.setAttribute('aria-pressed', String(!!cur && !colors.includes(cur)));
+    inp.addEventListener('input', () => onPick(inp.value));
+    lab.appendChild(inp); el.appendChild(lab);
+  }
+  const hasText = (st) => st.kind === 'text' || (st.kind === 'prop' && (st.id === 'bubble' || st.id === 'burst'));
+  let styleFor = null;
+  function syncStyle(st) {
+    $('stAttach').setAttribute('aria-pressed', st.face ? 'true' : 'false');
+    $('stEdit').hidden = !hasText(st);
+    const sig = [stEd.sel, st.kind, st.border, st.color, st.font].join('|');
+    if (styleFor === sig) return;
+    styleFor = sig;
+    const pick = (fn) => (v) => { const cur = stEd.list[stEd.sel]; if (cur) { fn(cur, v); drawStEd(); } };
+    swatches($('stBorders'), BORDER_SWATCHES, borderOf(st), pick((o, v) => { o.border = v; }), 'stBorderCustom');
+    const isText = st.kind === 'text';
+    $('stTextRow').hidden = !isText;
+    if (isText) {
+      swatches($('stColors'), TEXT_SWATCHES, st.color, pick((o, v) => { o.color = v; }), 'stColorCustom');
+      chipGroup($('stFonts'), Object.entries(FONTS).map(([id, f]) => ({ id, label: f.label })), f => (st.font || 'playful') === f.id,
+        pick((o, f) => { o.font = f.id; }), (b, f) => { b.style.fontFamily = FONTS[f.id].fam; b.style.fontWeight = 800; });
+    }
+  }
+  function editText() {
+    const st = stEd.list[stEd.sel]; if (!st || !hasText(st)) return;
+    const t = askText('Change the words:', st.text || '', st.kind === 'text' ? 60 : st.id === 'burst' ? 16 : 24);
+    if (t) { st.text = t; drawStEd(); }
+  }
+  $('stEdit').addEventListener('click', editText);
+  stc.addEventListener('dblclick', (e) => {
+    const pt = stLocal(e), i = hitSticker(stEd.list, pt.x, pt.y, stEd.view.w, stEd.view.h);
+    if (i >= 0) { stEd.sel = i; editText(); }
+  });
   function openPhotoStickers() {
     openStickers({
       list: curStickers(),
@@ -2517,25 +2705,25 @@
   buildFilterTiles();
   render();
 
-  // Offline support. The worker is scoped to this folder so it never touches other apps on the same site.
-  // A new release waits until you tap "Update" (so a half-made strip is never lost to a surprise reload).
+  // Offline support + automatic updates. The worker is scoped to this folder so it never touches other
+  // apps on the same site. A new version installs in the background and takes over; the page reloads
+  // right away if nothing is in progress, otherwise it offers a one-tap reload so no photos are lost.
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    const reload = () => { if (!reloading) { reloading = true; location.reload(); } };
+    const busy = () => state.photos.some(Boolean) || OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;                               // first install, nothing to refresh
+      if (busy()) $('updateBar').hidden = false; else reload();
+    });
+    $('updateBtn').addEventListener('click', reload);
     window.addEventListener('load', async () => {
       let reg;
       try { reg = await navigator.serviceWorker.register('sw.js', { scope: './' }); } catch (e) { return; }
-      const offer = () => { if (reg.waiting && navigator.serviceWorker.controller) $('updateBar').hidden = false; };
-      offer();
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed') offer(); });
-      });
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
-      let reloading = false;
-      $('updateBtn').addEventListener('click', () => {
-        if (!reg.waiting) { location.reload(); return; }
-        navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloading) { reloading = true; location.reload(); } });
-        reg.waiting.postMessage('skipWaiting');
-      });
+      const check = () => reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+      setInterval(check, 30 * 60 * 1000);
     });
   }
 })();
