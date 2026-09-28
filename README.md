@@ -19,6 +19,12 @@ strobe, slow-mo or 360° clip and save it as a video or GIF. Everything happens 
 - Drag to move. Pinch, or drag the round corner handle, to resize and turn. With a mouse,
   scroll to resize and shift+scroll to turn.
 
+**Saving without the booth design:** the save screen has a **🎉 Booth design / 📷 Just the photos**
+switch. Just the photos saves each photo on its own (pick one, or share them all) with its filter,
+stickers and text, but no background, frame or message. Videos have the same switch
+(**🎥 Just the video**), which keeps the whole camera frame. A photo you zoomed or moved keeps that
+framing; otherwise the whole photo is saved.
+
 To add a sticker, drop an SVG into `app/stickers/` and add a line to `app/stickers/stickers.js`
 (add a `face` entry if it should snap onto faces). `scripts/build-emoji.mjs` rebuilds the emoji list.
 

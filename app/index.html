@@ -308,6 +308,7 @@
 <div id="videoSheet" class="overlay" hidden>
   <div class="sheet">
     <h2>Your video is ready 🎬</h2>
+    <div class="chips save-modes" id="vidModes"></div>
     <video id="outVideo" controls loop playsinline muted></video>
     <p class="hint" id="videoHint"></p>
     <div class="btnrow">
@@ -372,7 +373,9 @@
 <div id="saveSheet" hidden>
   <div class="sheet">
     <h2 id="sheetTitle">Your picture is ready 🎉</h2>
+    <div class="chips save-modes" id="saveModes" hidden></div>
     <img id="savedImg" alt="Your photo booth picture">
+    <div class="save-picks" id="savePicks" hidden></div>
     <p class="hint" id="saveHint"></p>
     <div class="row">
       <a class="btn primary" id="dlBtn" href="#" download>⬇️ Save to device</a>

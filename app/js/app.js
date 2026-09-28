@@ -591,14 +591,14 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: []
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -1290,7 +1290,9 @@
     return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
   }
   let sheetFile = null, sheetUrl = null;
-  function showSaveSheet(blob, name, title, hint) {
+  function showSaveSheet(blob, name, title, hint, modes) {
+    $('saveModes').hidden = !modes; if (!modes) $('savePicks').hidden = true;
+    $('shareBtn').textContent = '📤 Share';
     if (sheetUrl) URL.revokeObjectURL(sheetUrl);
     sheetUrl = URL.createObjectURL(blob);
     sheetFile = new File([blob], name, { type: blob.type });
@@ -1309,16 +1311,65 @@
         ? '⬇️ saves it to your phone (Downloads — it shows up in your Gallery/Photos).<br>You can also press and hold the picture.'
         : '⬇️ downloads the file.';
   }
-  $('save').addEventListener('click', async () => {
-    render();
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
-    if (!blob) { toast('Could not create the image'); return; }
-    showSaveSheet(blob, `photobooth-${stamp()}.jpg`, 'Your picture is ready 🎉', photoHint());
+  // One photo on its own with its filter plus the stickers & text that sit on it, without the booth
+  // background, frame or message. The whole photo, unless it was zoomed or moved (then that framing).
+  function composePhotoOnly(i) {
+    const L = computeLayout(state.layout, state.count), tr = mulberry32(state.seed * 3 + 11);
+    let T = null;
+    L.rects.forEach((rect, k) => { const jit = jitterFor(rect, tr); if (k === i) T = photoXform(state.photos[i], rect, jit, L.border); });
+    const p = state.photos[i], src = photoSource(p), ks = src.width / p.canvas.width;
+    const adjusted = (p.zoom || 1) > 1.01 || p.cx != null || p.cy != null;
+    const c = adjusted ? T.crop : { sx: 0, sy: 0, sw: p.canvas.width, sh: p.canvas.height };
+    const cv = document.createElement('canvas'); cv.width = Math.round(c.sw); cv.height = Math.round(c.sh);
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(src, c.sx * ks, c.sy * ks, c.sw * ks, c.sh * ks, 0, 0, cv.width, cv.height);
+    const list = curStickers();
+    if (list.length) {
+      ctx.save(); T.toPhoto(ctx, cv.width / c.sw, c.sx, c.sy);
+      drawStickers(ctx, list, L.W, L.H, list.some(st => st.face) ? stripFaces() : null);
+      ctx.restore();
+    }
+    return cv;
+  }
+  const toJpeg = (cv) => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
+  const save = { mode: 'booth', pick: 0, strip: null, photos: [] };
+  async function buildSaveSheet() {
+    const name = `photobooth-${save.stamp}`;
+    if (save.mode === 'booth') {
+      if (!save.strip) { render(); save.strip = await toJpeg(canvas); }
+      if (!save.strip) { toast('Could not create the image'); return; }
+      showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
+    } else {
+      const idx = filledIdx();
+      if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(composePhotoOnly(i))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
+      save.pick = Math.min(save.pick, save.photos.length - 1);
+      const f = save.photos[save.pick];
+      showSaveSheet(f, f.name, 'Your photos 📷', photoHint(), true);
+      const all = save.photos.length > 1 && navigator.canShare && navigator.canShare({ files: save.photos });
+      if (all) { $('shareBtn').hidden = false; $('shareBtn').textContent = `📤 Share all ${save.photos.length}`; }
+    }
+    // thumbnails to choose which photo to save
+    const picks = $('savePicks'); picks.innerHTML = '';
+    picks.hidden = save.mode !== 'photos' || save.photos.length < 2;
+    save.photos.forEach((f, k) => {
+      const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Photo ' + (k + 1));
+      b.setAttribute('aria-pressed', String(k === save.pick));
+      const im = document.createElement('img'); im.src = URL.createObjectURL(f); im.onload = () => URL.revokeObjectURL(im.src);
+      b.appendChild(im); b.addEventListener('click', () => { save.pick = k; buildSaveSheet(); });
+      picks.appendChild(b);
+    });
+    chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Booth design' }, { id: 'photos', label: '📷 Just the photos' }],
+      m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
+  }
+  $('save').addEventListener('click', () => {
+    Object.assign(save, { strip: null, photos: [], pick: 0, stamp: stamp() });
+    buildSaveSheet();
   });
   $('dlBtn').addEventListener('click', () => { if (!isIOS && sheetFile) setTimeout(() => toast('Saved ' + sheetFile.name), 300); });
   $('shareBtn').addEventListener('click', async () => {
     if (!sheetFile) return;
-    try { await navigator.share({ files: [sheetFile] }); } catch (err) { /* cancelled */ }
+    const files = !$('saveModes').hidden && save.mode === 'photos' && save.photos.length > 1 ? save.photos : [sheetFile];
+    try { await navigator.share({ files }); } catch (err) { /* cancelled */ }
   });
   function closeSheet() { $('saveSheet').hidden = true; syncScroll(); }
   $('sheetClose').addEventListener('click', closeSheet);
@@ -1651,6 +1702,12 @@
     const a = jit.deg * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
     const ox = rect.x + rect.w / 2 + jit.dx, oy = rect.y + rect.h / 2 + jit.dy;
     return {
+      crop: c,
+      // makes `ctx` (drawing the photo's pixels from (x0, y0) at `scale`) accept picture coordinates, e.g. for stickers
+      toPhoto(ctx, scale, x0, y0) {
+        ctx.scale(scale, scale); ctx.translate(c.sx - x0, c.sy - y0);
+        ctx.scale(1 / k, 1 / k); ctx.translate(-px, -py); ctx.rotate(-a); ctx.translate(-ox, -oy);
+      },
       inside: (q) => q.x >= c.sx && q.x <= c.sx + c.sw && q.y >= c.sy && q.y <= c.sy + c.sh,
       map(q) {
         const lx = px + (q.x - c.sx) * k, ly = py + (q.y - c.sy) * k;
@@ -2470,7 +2527,8 @@
 
   // Renders frames into a 720×1280 framed picture: background, caption, photo frame, stickers.
   const GIF_FPS = 12, GIF_MAX = 96;
-  function videoComposer() {
+  // plain: just the clip (whole camera frame, with filter, stickers & text), no booth background
+  function videoComposer(plain) {
     const W = 720, H = 1280, top = 80, pw = 600, ph = 800;
     const L = { W, H, rects: [{ x: (W - pw) / 2, y: top, w: pw, h: ph }], border: 14,
       cap: { x: 0, y: top + ph + 14, w: W, h: H - (top + ph + 14) - 12 } };
@@ -2494,7 +2552,7 @@
       draw(src, mirror, opts = {}) {
         const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
         if (!sw) return;
-        const sc = Math.min(1, 720 / Math.max(sw, sh)), w = Math.round(sw * sc), h = Math.round(sh * sc);
+        const sc = Math.min(1, (plain ? 1280 : 720) / Math.max(sw, sh)), w = Math.round(sw * sc), h = Math.round(sh * sc);
         if (frame.width !== w || frame.height !== h) { frame.width = w; frame.height = h; }
         fctx.save();
         if (mirror) { fctx.translate(w, 0); fctx.scale(-1, 1); }
@@ -2510,17 +2568,31 @@
           if (!raw) { raw = PBFace.detect(frame) || []; if (!(src instanceof HTMLVideoElement)) faceCache.set(src, raw); }
         }
         PBFilters.applyFrame(fctx, w, h, state.filter);
-        octx.drawImage(bg, 0, 0);
-        drawPhoto(octx, holder, L.rects[0], jit, L.border, 0, mulberry32(7));
-        if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, W, H); }
-        if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track);
-        drawEdge(octx, W, H);
+        if (plain) {
+          const T = photoXform(holder, L.rects[0], jit, L.border);
+          const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
+          if (out.width !== ow || out.height !== oh) { out.width = ow; out.height = oh; }
+          octx.drawImage(frame, 0, 0, ow, oh);
+          if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, ow, oh); }
+          if (opts.stickers !== false) {
+            octx.save(); T.toPhoto(octx, ow / w, 0, 0);
+            drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track);
+            octx.restore();
+          }
+        } else {
+          octx.drawImage(bg, 0, 0);
+          drawPhoto(octx, holder, L.rects[0], jit, L.border, 0, mulberry32(7));
+          if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, W, H); }
+          if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track);
+          drawEdge(octx, W, H);
+        }
         if (comp.collect && opts.stickers !== false) {
           const now = opts.t != null ? opts.t : performance.now();
           if (now - comp.lastGrab >= comp.gifDelay - 1) {
             comp.lastGrab = now;
-            const g = document.createElement('canvas'); g.width = 360; g.height = 640;
-            g.getContext('2d').drawImage(out, 0, 0, 360, 640);
+            const gs = 360 / Math.max(out.width, out.height / (16 / 9));
+            const g = document.createElement('canvas'); g.width = Math.round(out.width * gs); g.height = Math.round(out.height * gs);
+            g.getContext('2d').drawImage(out, 0, 0, g.width, g.height);
             comp.gif.push(g);
             if (comp.gif.length > GIF_MAX) { comp.gif = comp.gif.filter((_, i) => i % 2 === 0); comp.gifDelay *= 2; }
           }
@@ -2557,7 +2629,7 @@
   }
 
   async function makeVideo(m, clip, mirror) {
-    const comp = videoComposer();
+    const comp = videoComposer(state.vplain);
     const wrap = $('makingWrap'); wrap.innerHTML = ''; wrap.appendChild(comp.out);
     $('makingTitle').textContent = `Making your ${plain(m.label).toLowerCase()}…`;
     $('making').hidden = false; syncScroll();
@@ -2647,6 +2719,12 @@
     vid.file = new File([res.blob], `${vid.name}.${ext}`, { type: res.blob.type || 'video/' + ext });
     const v = $('outVideo'); v.src = vid.url; v.play().catch(() => {});
     $('vidDl').href = vid.url; $('vidDl').download = vid.file.name;
+    chipGroup($('vidModes'), [{ v: false, label: '🎉 Booth design' }, { v: true, label: '🎥 Just the video' }],
+      o => !!state.vplain === o.v, async o => {
+        if (!!state.vplain === o.v) return;
+        state.vplain = o.v; saveSettings();
+        closeVideoSheet(); await buildVideo();
+      });
     $('vidShare').hidden = !(navigator.canShare && navigator.canShare({ files: [vid.file] }));
     $('vidApng').hidden = !PBEncoders.apngSupported();
     $('vidGif').textContent = '🎞️ GIF'; $('vidApng').textContent = '🖼️ Animated PNG';
@@ -2700,7 +2778,8 @@
       } finally { cv.dispose(); }
     }
     base = document.createElement('canvas'); base.width = comp.W; base.height = comp.H;
-    base.getContext('2d').drawImage(comp.out, 0, 0);
+    const bctx = base.getContext('2d');
+    bctx.drawImage(comp.out, 0, 0);
     // props are placed on this frame; while the video is made they follow each face
     let faces = null;
     PBFace.load().then(ok => { faces = comp.facesOf(ok && comp.raw ? PBFace.detect(comp.raw) : []) || []; facesChanged(); });
