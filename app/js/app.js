@@ -1845,11 +1845,55 @@
   function stickerBox(st) {
     if (st.kind === 'emoji') return { w: 1, h: 1 };
     if (st.kind === 'svg') { const im = svgImage(st.id); return { w: 1, h: im ? im.naturalHeight / im.naturalWidth : 1 }; }
-    if (st.kind === 'text') {
-      measureCtx.font = textFont(st, 100);
-      return { w: Math.max(.2, measureCtx.measureText(st.text || ' ').width / 100 * TEXT_SIZE), h: TEXT_SIZE * 1.3 };
-    }
+    if (st.kind === 'text') { const L = textLayout(st); return { w: L.w, h: L.h }; }
     return { w: 1, h: PBProps.height(st.id) };
+  }
+  // Text stickers: several lines, optionally bent into an arc (st.curve -1…1: frown…rainbow).
+  // Everything is in units at font size TEXT_SIZE; cached because it's measured on every draw.
+  const textCache = new Map();
+  function textLayout(st) {
+    const key = [st.text, st.font, st.curve || 0].join('|');
+    let L = textCache.get(key);
+    if (L) return L;
+    measureCtx.font = textFont(st, 100);
+    const fs = TEXT_SIZE, lh = fs * 1.2, curve = st.curve || 0;
+    const lines = String(st.text || ' ').split('\n').map(t => {
+      const chars = [...t].map(ch => ({ ch, w: measureCtx.measureText(ch).width / 100 * fs }));
+      return { t, chars, w: Math.max(fs * .3, measureCtx.measureText(t).width / 100 * fs) };
+    });
+    const maxW = Math.max(...lines.map(l => l.w));
+    let w = maxW, h = lines.length * lh, bend = 0;
+    if (curve) {
+      // an arc spanning up to 180°; its depth is added to the height
+      const th = Math.abs(curve) * Math.PI, R = maxW / th;
+      bend = R * (1 - Math.cos(th / 2));
+      w = Math.max(maxW * .4, 2 * R * Math.sin(Math.min(th, Math.PI) / 2)) + fs * .3;
+      h += bend;
+    }
+    L = { lines, w: Math.max(.2, w), h, lh, fs, curve, bend, maxW };
+    textCache.set(key, L); if (textCache.size > 200) textCache.delete(textCache.keys().next().value);
+    return L;
+  }
+  function paintText(c, st, u) {
+    const L = textLayout(st), px = u * L.fs;
+    c.font = textFont(st, px); c.fillStyle = st.color || '#ff2d87'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const top = -L.h / 2 + (L.curve < 0 ? L.bend : 0);
+    L.lines.forEach((line, i) => {
+      const y = (top + L.lh * (i + .5)) * u + px * .06;
+      if (!L.curve) { c.fillText(line.t, 0, y); return; }
+      // place each letter along a circle: centre below the line for a rainbow, above for a frown
+      const th = Math.abs(L.curve) * Math.PI * (line.w / L.maxW), R = line.w / th * u, dir = L.curve > 0 ? 1 : -1;
+      let x = -line.w * u / 2;
+      line.chars.forEach(({ ch, w }) => {
+        const mid = x + w * u / 2, a = mid / R;
+        c.save();
+        c.translate(Math.sin(a) * R, y + dir * (R - Math.cos(a) * R));
+        c.rotate(dir * a);
+        c.fillText(ch, 0, 0);
+        c.restore();
+        x += w * u;
+      });
+    });
   }
   function stickerFit(st) {
     if (st.kind === 'svg') { const d = (self.PBStickers || []).find(x => x.id === st.id); return d && d.face || null; }
@@ -1866,8 +1910,7 @@
       const im = svgImage(st.id);
       if (im) { const h = u * im.naturalHeight / im.naturalWidth; c.drawImage(im, -u / 2, -h / 2, u, h); }
     } else if (st.kind === 'text') {
-      c.font = textFont(st, u * TEXT_SIZE); c.fillStyle = st.color || '#ff2d87';
-      c.fillText(st.text || '', 0, u * TEXT_SIZE * 0.06);
+      paintText(c, st, u);
     } else PBProps.draw(c, st.id, u, st.text);
   }
   // Stickers are rendered once into a small bitmap (with their outline) and reused; sizes are
@@ -1876,7 +1919,7 @@
   function stickerBitmap(st, px) {
     const q = Math.max(8, Math.round(Math.pow(1.08, Math.round(Math.log(Math.max(8, px)) / Math.log(1.08)))));
     const border = borderOf(st);
-    const key = [st.kind, st.id, st.text, st.color, st.font, border, q].join('|');
+    const key = [st.kind, st.id, st.text, st.color, st.font, st.curve, border, q].join('|');
     let bm = bmCache.get(key);
     if (bm) { bmCache.delete(key); bmCache.set(key, bm); return bm; }
     if (st.kind === 'svg' && !svgImage(st.id)) return null;
@@ -1900,11 +1943,28 @@
     if (bmCache.size > 150) bmCache.delete(bmCache.keys().next().value);
     return bm;
   }
-  function drawSticker(ctx, st, W, H) {
+  // Sticker motion for videos (and the video sticker studio): time in seconds, or null for stills.
+  const ANIMS = [
+    { id: '', label: 'Still' }, { id: 'wiggle', label: '〰️ Wiggle' }, { id: 'pulse', label: '💓 Pulse' }, { id: 'bounce', label: '⛹️ Bounce' },
+    { id: 'spin', label: '🌀 Spin' }, { id: 'float', label: '🎈 Float' }, { id: 'flash', label: '✨ Flash' }
+  ];
+  function animate(ctx, st, unit, t) {
+    const ph = (st.x * 7 + st.y * 13) % 6.28;               // stickers don't all move in step
+    switch (st.anim) {
+      case 'wiggle': ctx.rotate(Math.sin(t * 9 + ph) * .18); break;
+      case 'pulse': { const k = 1 + .12 * Math.sin(t * 7 + ph); ctx.scale(k, k); break; }
+      case 'bounce': ctx.translate(0, -Math.abs(Math.sin(t * 5 + ph)) * unit * .25); break;
+      case 'spin': ctx.rotate(t * 3.5 + ph); break;
+      case 'float': ctx.translate(Math.sin(t * 1.6 + ph) * unit * .08, Math.sin(t * 2.3 + ph) * unit * .12); break;
+      case 'flash': ctx.globalAlpha *= .35 + .65 * (Math.sin(t * 8 + ph) > 0 ? 1 : 0); break;
+    }
+  }
+  function drawSticker(ctx, st, W, H, t) {
     const unit = st.s * Math.min(W, H);
     ctx.save();
     ctx.translate(st.x * W, st.y * H);
     ctx.rotate(st.r || 0);
+    if (st.anim && t != null) animate(ctx, st, unit, t);
     if (st.flip) ctx.scale(-1, 1);
     if (st.kind === 'prop' && !borderOf(st)) PBProps.draw(ctx, st.id, unit, st.text);   // crisp vectors
     else {
@@ -1919,7 +1979,7 @@
   }
   // Attached stickers (st.face) are re-placed on their face before drawing; `track` switches from
   // "same face in the same photo" (strips) to following the nearest face frame by frame (videos).
-  function drawStickers(ctx, list, W, H, faces, track) {
+  function drawStickers(ctx, list, W, H, faces, track, t) {
     (list || []).forEach(st => {
       let f = null;
       if (st.face && faces) {
@@ -1929,7 +1989,7 @@
       }
       // props picked in the camera only show up on an actual face
       st._hidden = !!(st.face && st.face.cam && !f);
-      if (!st._hidden) drawSticker(ctx, st, W, H);
+      if (!st._hidden) drawSticker(ctx, st, W, H, t);
     });
   }
 
@@ -2080,6 +2140,7 @@
   function openStickers(opts) {
     stEd.list = opts.list; stEd.base = opts.getBase(); stEd.onDone = opts.onDone; stEd.sel = -1;
     if (opts.tab) stEd.tab = opts.tab;
+    stEd.video = !!opts.video;
     stEd.before = JSON.stringify(stEd.list);
     stEd.getFaces = opts.getFaces || null; stEd.faces = stEd.getFaces ? stEd.getFaces() : null;
     stEd.hist = [JSON.stringify(stEd.list)]; stEd.hi = 0; syncUndo();
@@ -2154,7 +2215,9 @@
     ctx.save();
     ctx.translate(V.x, V.y);
     ctx.beginPath(); ctx.rect(0, 0, V.w, V.h); ctx.clip();
-    drawStickers(ctx, stEd.list, V.w, V.h, stEd.faces);
+    const moving = stEd.video && stEd.list.some(s => s.anim);
+    drawStickers(ctx, stEd.list, V.w, V.h, stEd.faces, null, moving ? performance.now() / 1000 : null);
+    if (moving && !stEd.animRaf) stEd.animRaf = requestAnimationFrame(() => { stEd.animRaf = 0; drawStEd(true); });
     const st = stEd.list[stEd.sel];
     if (st) {
       const f = st.face && stEd.faces && faceFor(st, stEd.faces, V.w, V.h);
@@ -2393,7 +2456,7 @@
     } else if (stEd.tab === 'fun') {
       (self.PBStickers || []).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
     } else if (stEd.tab === 'words') {
-      add('🔤 Add your own text', () => { const t = askText('Your text:', ''); if (t) addSticker({ kind: 'text', text: t, color: '#ff2d87', font: 'playful', s: .3 }); }, 'txt wide');
+      add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
       add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
       add('💥 Your own burst', () => { const t = askText('Words for the comic burst:', 'WHOA!', 16); if (t) addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 }); }, 'txt');
       PBProps.WORDS.bubble.forEach(t => add(propIcon('bubble', t), () => addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 })));
@@ -2441,11 +2504,13 @@
   function syncStyle(st) {
     $('stAttach').setAttribute('aria-pressed', st.face ? 'true' : 'false');
     $('stEdit').hidden = !hasText(st);
-    const sig = [stEd.sel, st.kind, st.border, st.color, st.font].join('|');
+    const sig = [stEd.sel, st.kind, st.border, st.color, st.font, st.anim].join('|');
     if (styleFor === sig) return;
     styleFor = sig;
     const pick = (fn) => (v) => { const cur = stEd.list[stEd.sel]; if (cur) { fn(cur, v); drawStEd(); } };
     swatches($('stBorders'), BORDER_SWATCHES, borderOf(st), pick((o, v) => { o.border = v; }), 'stBorderCustom');
+    $('stAnimRow').hidden = !stEd.video;
+    if (stEd.video) chipGroup($('stAnims'), ANIMS, a => (st.anim || '') === a.id, pick((o, a) => { o.anim = a.id; }));
     const isText = st.kind === 'text';
     $('stTextRow').hidden = !isText;
     if (isText) {
@@ -2456,9 +2521,37 @@
   }
   function editText() {
     const st = stEd.list[stEd.sel]; if (!st || !hasText(st)) return;
-    const t = askText('Change the words:', st.text || '', st.kind === 'text' ? 60 : st.id === 'burst' ? 16 : 24);
+    if (st.kind === 'text') { openTextSheet(st); return; }
+    const t = askText('Change the words:', st.text || '', st.id === 'burst' ? 16 : 24);
     if (t) { st.text = t; drawStEd(); }
   }
+  // the text box: several lines and a curve slider, with a live preview on the picture
+  let textTarget = null;
+  function openTextSheet(st) {
+    textTarget = st;
+    $('txtInput').value = st ? st.text : '';
+    $('txtCurve').value = st ? (st.curve || 0) : 0;
+    $('txtTitle').textContent = st ? 'Change your text' : 'Add your text';
+    $('textSheet').hidden = false;
+    setTimeout(() => $('txtInput').focus(), 50);
+  }
+  function textSheetLive() {
+    if (!textTarget) return;
+    textTarget.text = $('txtInput').value.slice(0, 120) || ' ';
+    textTarget.curve = +$('txtCurve').value;
+    drawStEd();
+  }
+  $('txtInput').addEventListener('input', textSheetLive);
+  $('txtCurve').addEventListener('input', textSheetLive);
+  $('txtOk').addEventListener('click', () => {
+    const t = $('txtInput').value.replace(/\s+$/, '').slice(0, 120);
+    $('textSheet').hidden = true;
+    if (!t.trim()) { if (textTarget) { stEd.list.splice(stEd.list.indexOf(textTarget), 1); stEd.sel = -1; drawStEd(); } textTarget = null; return; }
+    if (textTarget) { textTarget.text = t; textTarget.curve = +$('txtCurve').value; drawStEd(); }
+    else addSticker({ kind: 'text', text: t, curve: +$('txtCurve').value, color: '#ff2d87', font: 'playful', s: .3 });
+    textTarget = null;
+  });
+  $('txtCancel').addEventListener('click', () => { $('textSheet').hidden = true; textTarget = null; }); 
   $('stEdit').addEventListener('click', editText);
   stc.addEventListener('dblclick', (e) => {
     const pt = stLocal(e), i = hitSticker(stEd.list, pt.x, pt.y, stEd.view.w, stEd.view.h);
@@ -3136,6 +3229,7 @@
           mask = !(src instanceof HTMLVideoElement) && maskCache.get(src);
           if (!mask) { mask = PBFace.personMask(frame); if (mask && !(src instanceof HTMLVideoElement)) maskCache.set(src, mask); }
         }
+        const clipT = (opts.t != null ? opts.t : performance.now()) / 1000;
         PBFilters.applyFrame(fctx, w, h, state.filter, state.adj);
         if (mask) { composeSwap(frame, mask, swapOut); fctx.drawImage(swapOut, 0, 0); }
         if (plain) {
@@ -3146,14 +3240,14 @@
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, ow, oh); }
           if (opts.stickers !== false) {
             octx.save(); T.toPhoto(octx, ow / w, 0, 0);
-            drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track);
+            drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
             octx.restore();
           }
         } else {
           octx.drawImage(bg, 0, 0);
           drawPhoto(octx, holder, L.rects[0], jit, L.border, 0, mulberry32(7));
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, W, H); }
-          if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track);
+          if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
           drawEdge(octx, W, H);
         }
         if (comp.collect && opts.stickers !== false) {
@@ -3384,6 +3478,7 @@
       list: state.vstickers,
       getBase: () => base,
       getFaces: () => faces,
+      video: true,
       onDone: async (changed) => { saveSettings(); if (changed) await buildVideo(); else $('videoSheet').hidden = false, syncScroll(); }
     });
   });

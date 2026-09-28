@@ -421,6 +421,7 @@
     </div>
     <div class="st-style">
       <div class="st-row"><span class="lbl">Outline</span><div class="swatches" id="stBorders"></div></div>
+      <div class="st-row" id="stAnimRow" hidden><span class="lbl">Motion</span><div class="chips" id="stAnims"></div></div>
       <div id="stTextRow" hidden>
         <div class="st-row"><span class="lbl">Color</span><div class="swatches" id="stColors"></div></div>
         <div class="st-row"><span class="lbl">Font</span><div class="chips" id="stFonts"></div></div>
@@ -435,6 +436,18 @@
       <div class="chips tones" id="stTones"></div>
     </div>
     <div class="st-items" id="stItems"></div>
+  </div>
+</div>
+
+<div id="textSheet" class="overlay" hidden>
+  <div class="sheet">
+    <h2 id="txtTitle">Add your text</h2>
+    <textarea id="txtInput" rows="3" maxlength="120" placeholder="Type something… (Enter for a new line)"></textarea>
+    <label class="field slider">🌈 Curve <input type="range" id="txtCurve" min="-1" max="1" step="0.05" value="0"></label>
+    <div class="btnrow">
+      <button type="button" id="txtCancel">Cancel</button>
+      <button type="button" id="txtOk" class="primary">✓ Done</button>
+    </div>
   </div>
 </div>
 

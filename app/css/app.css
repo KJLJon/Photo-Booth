@@ -297,6 +297,8 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 #makingWrap canvas { display: block; max-width: 78vw; max-height: 68vh; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
 #videoSheet { z-index: 26; }
 #saveSheet { z-index: 30; }
+#textSheet { z-index: 50; background: rgba(20,10,31,.55); align-items: flex-end; }
+#txtInput { width: 100%; font: inherit; font-size: 1.1rem; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); resize: vertical; }
 #outVideo { display: block; width: 100%; max-height: 50vh; border-radius: 8px; background: #000; }
 .sheet .btnrow button, .sheet .btnrow a { padding: 12px 8px; font-size: .92rem; }
 
