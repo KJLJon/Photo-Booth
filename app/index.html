@@ -329,7 +329,11 @@
 
 <div id="stickerEd" hidden>
   <div class="ed-top">
-    <button id="stClear" type="button">🗑 Clear</button>
+    <div class="ed-left">
+      <button id="stUndo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>↶</button>
+      <button id="stRedo" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
+      <button id="stClear" type="button" aria-label="Remove all stickers" title="Remove all stickers">🗑</button>
+    </div>
     <div style="text-align:center">
       <div class="title">Stickers &amp; props</div>
       <div class="sub" id="stSub">Drag · pinch or use the corner ↻ to resize &amp; turn</div>

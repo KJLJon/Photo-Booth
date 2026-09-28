@@ -297,6 +297,9 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
   padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
 }
 #stickerEd .ed-top button { background: rgba(255,255,255,.14); color: #fff; }
+#stickerEd .ed-left { display: flex; gap: 6px; }
+#stickerEd .ed-left button { padding: 8px 11px; min-width: 40px; }
+#stickerEd .ed-top button:disabled { opacity: .35; }
 #stickerEd .ed-top button.primary { background: linear-gradient(120deg, var(--accent2), var(--accent)); }
 .dlbar { height: 4px; background: rgba(255,255,255,.12); margin: 0 14px; border-radius: 4px; overflow: hidden; }
 .dlbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .3s; }

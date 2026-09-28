@@ -1899,6 +1899,7 @@
     if (opts.tab) stEd.tab = opts.tab;
     stEd.before = JSON.stringify(stEd.list);
     stEd.getFaces = opts.getFaces || null; stEd.faces = stEd.getFaces ? stEd.getFaces() : null;
+    stEd.hist = [JSON.stringify(stEd.list)]; stEd.hi = 0; syncUndo();
     $('stickerEd').hidden = false; syncScroll();
     buildStickerTray();
     requestAnimationFrame(drawStEd);
@@ -1918,7 +1919,49 @@
     const w = B.width * sc, h = B.height * sc;
     return { dpr, cw, ch, x: (cw - w) / 2, y: (ch - h) / 2, w, h };
   }
-  function drawStEd() {
+  // ---- undo / redo: a snapshot is taken shortly after each change settles (not on every drag frame) ----
+  let histTimer = 0;
+  function noteChange() {
+    clearTimeout(histTimer);
+    histTimer = setTimeout(() => {
+      if (!stEd.hist || stEd.pts.size) { if (stEd.pts.size) noteChange(); return; }
+      const snap = JSON.stringify(stEd.list);
+      if (snap === stEd.hist[stEd.hi]) return;
+      stEd.hist.splice(stEd.hi + 1); stEd.hist.push(snap);
+      if (stEd.hist.length > 80) stEd.hist.shift();
+      stEd.hi = stEd.hist.length - 1; syncUndo();
+    }, 350);
+  }
+  function syncUndo() {
+    $('stUndo').disabled = !stEd.hist || stEd.hi <= 0;
+    $('stRedo').disabled = !stEd.hist || stEd.hi >= stEd.hist.length - 1;
+  }
+  function stepHist(d) {
+    clearTimeout(histTimer);
+    const i = stEd.hi + d;
+    if (!stEd.hist || i < 0 || i >= stEd.hist.length) return;
+    stEd.hi = i;
+    stEd.list.splice(0, stEd.list.length, ...JSON.parse(stEd.hist[i]));
+    stEd.sel = -1; syncUndo(); drawStEd(true);
+  }
+  $('stUndo').addEventListener('click', () => stepHist(-1));
+  $('stRedo').addEventListener('click', () => stepHist(1));
+  document.addEventListener('keydown', (e) => {
+    if ($('stickerEd').hidden || /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    if (mod && k === 'z') { e.preventDefault(); stepHist(e.shiftKey ? 1 : -1); return; }
+    if (mod && k === 'y') { e.preventDefault(); stepHist(1); return; }
+    const st = stEd.list[stEd.sel];
+    if (!st) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); $('stDelete').click(); return; }
+    const step = e.shiftKey ? .02 : .005, mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (mv) { e.preventDefault(); st.x = clamp(st.x + mv[0], 0, 1); st.y = clamp(st.y + mv[1], 0, 1); refitSel(st, false); drawStEd(); }
+    if (e.key === 'Escape') { stEd.sel = -1; drawStEd(); }
+  });
+
+  function drawStEd(fromHistory) {
+    if (fromHistory !== true) noteChange();
+    stc.dataset.count = stEd.list.length;
     if ($('stickerEd').hidden) return;
     const V = stView(); stEd.view = V;
     const ctx = stc.getContext('2d');
