@@ -1,0 +1,35 @@
+/* SVG sticker pack. Each sticker is stickers/<id>.svg. `face` works like in js/props.js: where it sits
+   when it snaps onto a face (anchor, offsets and width in eye-to-eye distances).
+   Uses `self` so the service worker can read the list too (to keep every sticker available offline). */
+self.PBStickers = [
+  { id: 'googly-eyes', name: 'Googly eyes', face: { at: 'eyes', y: 0, s: 2 } },
+  { id: 'googly-eye', name: 'Googly eye' },
+  { id: 'cat-whiskers', name: 'Cat nose & whiskers', face: { at: 'nose', y: .05, s: 2.6 } },
+  { id: 'dog-ears', name: 'Dog ears', face: { at: 'eyes', y: -1, s: 3.4 } },
+  { id: 'dog-nose', name: 'Dog nose', face: { at: 'nose', y: .05, s: .9 } },
+  { id: 'dog-tongue', name: 'Dog tongue', face: { at: 'mouth', y: .5, s: .75 } },
+  { id: 'pig-nose', name: 'Pig nose', face: { at: 'nose', y: .05, s: .95 } },
+  { id: 'clown-nose', name: 'Clown nose', face: { at: 'nose', s: .6 } },
+  { id: 'rosy-cheeks', name: 'Rosy cheeks', face: { at: 'eyes', y: .75, s: 2.6 } },
+  { id: 'monocle', name: 'Monocle', face: { at: 'eyes', x: .5, y: .33, s: .95 } },
+  { id: 'eye-patch', name: 'Eye patch', face: { at: 'eyes', x: -.13, y: .02, s: 2.8 } },
+  { id: 'handlebar', name: 'Handlebar mustache', face: { at: 'lip', s: 1.6 } },
+  { id: 'beard', name: 'Beard', face: { at: 'mouth', y: .1, s: 2.2 } },
+  { id: 'tiara', name: 'Tiara', face: { at: 'eyes', y: -1.65, s: 1.7 } },
+  { id: 'viking-helmet', name: 'Viking helmet', face: { at: 'eyes', y: -1.72, s: 3.2 } },
+  { id: 'cowboy-hat', name: 'Cowboy hat', face: { at: 'eyes', y: -1.65, s: 3.4 } },
+  { id: 'unicorn-horn', name: 'Unicorn horn', face: { at: 'eyes', y: -1.96, s: .75 } },
+  { id: 'antennae', name: 'Alien antennae', face: { at: 'eyes', y: -2.2, s: 2.6 } },
+  { id: 'birthday-cake', name: 'Birthday cake' },
+  { id: 'cupcake', name: 'Cupcake' },
+  { id: 'gift', name: 'Gift' },
+  { id: 'pizza', name: 'Pizza' },
+  { id: 'donut', name: 'Donut' },
+  { id: 'ice-cream', name: 'Ice cream' },
+  { id: 'disco-ball', name: 'Disco ball' },
+  { id: 'microphone', name: 'Microphone' },
+  { id: 'fire', name: 'Fire' },
+  { id: 'sparkle', name: 'Sparkles' },
+  { id: 'rainbow-cloud', name: 'Rainbow' },
+  { id: 'lol-badge', name: 'LOL' }
+];

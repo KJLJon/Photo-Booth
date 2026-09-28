@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="180" viewBox="0 0 200 180">
+<path d="M8 10 Q2 70 30 118 Q60 172 100 176 Q140 172 170 118 Q198 70 192 10 Q176 44 150 52 Q130 30 100 30 Q70 30 50 52 Q24 44 8 10Z M70 70 Q100 56 130 70 Q126 96 100 100 Q74 96 70 70Z" fill="#6b3e1f" fill-rule="evenodd" stroke="#3a1f0b" stroke-width="4" stroke-linejoin="round"/>
+<g stroke="#8c5a31" stroke-width="3" stroke-linecap="round" fill="none"><path d="M40 90 q6 20 18 34"/><path d="M160 90 q-6 20 -18 34"/><path d="M84 124 q4 18 2 30"/><path d="M116 124 q-4 18 -2 30"/><path d="M100 118 v40"/></g>
+</svg>

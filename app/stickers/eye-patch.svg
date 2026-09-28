@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+<path d="M0 26 L300 58" stroke="#1b1b1b" stroke-width="7"/>
+<path d="M68 38 Q110 22 152 40 Q160 76 110 100 Q60 80 68 38Z" fill="#1b1b1b"/>
+<path d="M84 44 Q110 34 136 46" stroke="#555" stroke-width="4" fill="none" stroke-linecap="round"/>
+<text x="110" y="80" font-family="Arial,sans-serif" font-weight="900" font-size="26" fill="#fff" text-anchor="middle">☠</text>
+</svg>

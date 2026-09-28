@@ -1,5 +1,8 @@
 /* Photo Booth props & stickers — original clip art drawn with canvas paths (no image files, works offline).
-   Every prop is drawn centred on (0,0) in "units" where the prop is 1 unit wide; `h` is its height in units. */
+   Every prop is drawn centred on (0,0) in "units" where the prop is 1 unit wide; `h` is its height in units.
+   `face` says where a prop sits when it snaps onto a face: `at` is the anchor (eyes, nose, lip = between
+   nose and mouth, mouth), `x`/`y` move it from there and `s` is its width — all measured in eye-to-eye
+   distances, turning with the head. */
 (function () {
   'use strict';
 
@@ -43,7 +46,7 @@
   }
 
   const P = {
-    shades: { name: 'Sunglasses', h: .34, draw(c) {
+    shades: { name: 'Sunglasses', h: .34, face: { at: 'eyes', y: .02, s: 1.95 }, draw(c) {
       c.fillStyle = '#111'; c.fillRect(-.5, -.15, 1, .05);
       for (const s of [-1, 1]) {
         c.fillStyle = '#111';
@@ -54,7 +57,7 @@
       }
       bridge(c, '#111');
     } },
-    heartglasses: { name: 'Heart glasses', h: .42, draw(c) {
+    heartglasses: { name: 'Heart glasses', h: .42, face: { at: 'eyes', y: .03, s: 1.95 }, draw(c) {
       for (const s of [-1, 1]) {
         c.beginPath(); heartPath(c, s * .26, -.02, .22);
         c.fillStyle = 'rgba(255,40,90,.85)'; c.fill();
@@ -63,14 +66,14 @@
       }
       bridge(c, '#b0003a');
     } },
-    starglasses: { name: 'Star glasses', h: .46, draw(c) {
+    starglasses: { name: 'Star glasses', h: .46, face: { at: 'eyes', y: 0, s: 2 }, draw(c) {
       for (const s of [-1, 1]) {
         c.beginPath(); starPath(c, s * .26, 0, .24, .11, 5, 0);
         c.fillStyle = '#ff5fa2'; c.fill(); c.lineWidth = .035; c.strokeStyle = '#ffd23f'; c.lineJoin = 'round'; c.stroke();
       }
       bridge(c, '#ffd23f');
     } },
-    mustache: { name: 'Mustache', h: .34, draw(c) {
+    mustache: { name: 'Mustache', h: .34, face: { at: 'lip', y: .02, s: 1.15 }, draw(c) {
       c.fillStyle = '#2b1b10';
       for (const s of [1, -1]) {
         c.beginPath(); c.moveTo(0, -.06);
@@ -81,7 +84,7 @@
         c.closePath(); c.fill();
       }
     } },
-    partyhat: { name: 'Party hat', h: 1.2, draw(c) {
+    partyhat: { name: 'Party hat', h: 1.2, face: { at: 'eyes', y: -2.1, s: 1.7 }, draw(c) {
       c.save(); c.beginPath(); c.moveTo(-.4, .5); c.lineTo(0, -.52); c.lineTo(.4, .5); c.closePath(); c.clip();
       for (let i = -8; i < 8; i++) { c.fillStyle = i % 2 ? '#ff5fa2' : '#ffd23f'; c.save(); c.rotate(-.5); c.fillRect(i * .12, -1, .12, 2); c.restore(); }
       c.fillStyle = '#fff'; for (const [x, y] of [[-.12, .15], [.1, -.05], [.15, .32], [-.02, -.25], [-.2, .4]]) { c.beginPath(); c.arc(x, y, .03, 0, 7); c.fill(); }
@@ -89,7 +92,7 @@
       c.fillStyle = '#fff'; for (let x = -.4; x <= .4; x += .1) { c.beginPath(); c.arc(x, .5, .065, 0, 7); c.fill(); }
       c.fillStyle = '#3bceac'; c.beginPath(); c.arc(0, -.52, .09, 0, 7); c.fill();
     } },
-    crown: { name: 'Crown', h: .66, draw(c) {
+    crown: { name: 'Crown', h: .66, face: { at: 'eyes', y: -1.8, s: 2 }, draw(c) {
       c.beginPath(); c.moveTo(-.5, .28); c.lineTo(-.5, -.18); c.lineTo(-.27, .03); c.lineTo(0, -.3); c.lineTo(.27, .03); c.lineTo(.5, -.18); c.lineTo(.5, .28); c.closePath();
       const g = c.createLinearGradient(0, -.3, 0, .3); g.addColorStop(0, '#ffe680'); g.addColorStop(1, '#e0a800');
       c.fillStyle = g; c.fill(); c.lineWidth = .03; c.strokeStyle = '#a07000'; c.lineJoin = 'round'; c.stroke();
@@ -97,14 +100,14 @@
       [['#e63946', -.3], ['#1d77ff', 0], ['#06d6a0', .3]].forEach(([col, x]) => { c.fillStyle = col; c.beginPath(); c.arc(x, .21, .045, 0, 7); c.fill(); });
       c.fillStyle = '#fff3b0'; [[-.5, -.18], [0, -.3], [.5, -.18]].forEach(([x, y]) => { c.beginPath(); c.arc(x, y, .045, 0, 7); c.fill(); });
     } },
-    tophat: { name: 'Top hat', h: .92, draw(c) {
+    tophat: { name: 'Top hat', h: .92, face: { at: 'eyes', y: -2.06, s: 2.4 }, draw(c) {
       c.fillStyle = '#1a1a1a'; c.fillRect(-.3, -.46, .6, .8);
       c.beginPath(); c.ellipse(0, -.46, .3, .06, 0, 0, 7); c.fillStyle = '#2d2d2d'; c.fill();
       c.fillStyle = '#d62828'; c.fillRect(-.3, .16, .6, .11);
       c.beginPath(); c.ellipse(0, .36, .5, .09, 0, 0, 7); c.fillStyle = '#1a1a1a'; c.fill();
       c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(-.22, -.4, .07, .5);
     } },
-    bowtie: { name: 'Bow tie', h: .56, draw(c) {
+    bowtie: { name: 'Bow tie', h: .56, face: { at: 'mouth', y: 1.4, s: 1.3 }, draw(c) {
       c.save();
       c.beginPath();
       for (const s of [-1, 1]) {
@@ -116,7 +119,7 @@
       c.restore();
       c.beginPath(); rrect(c, -.08, -.1, .16, .2, .05); c.fillStyle = '#a4031f'; c.fill();
     } },
-    lips: { name: 'Lips', h: .5, draw(c) {
+    lips: { name: 'Lips', h: .5, face: { at: 'mouth', y: .02, s: .9 }, draw(c) {
       c.beginPath(); c.moveTo(-.5, 0);
       c.bezierCurveTo(-.35, -.23, -.14, -.26, 0, -.12); c.bezierCurveTo(.14, -.26, .35, -.23, .5, 0);
       c.bezierCurveTo(.3, .3, -.3, .3, -.5, 0); c.closePath();
@@ -124,7 +127,7 @@
       c.beginPath(); c.moveTo(-.46, .005); c.quadraticCurveTo(0, .07, .46, .005); c.lineWidth = .025; c.strokeStyle = '#8b0033'; c.stroke();
       c.fillStyle = 'rgba(255,255,255,.45)'; c.beginPath(); c.ellipse(.1, .13, .1, .03, -.1, 0, 7); c.fill();
     } },
-    bunny: { name: 'Bunny ears', h: 1.1, draw(c) {
+    bunny: { name: 'Bunny ears', h: 1.1, face: { at: 'eyes', y: -2.4, s: 2.4 }, draw(c) {
       for (const s of [-1, 1]) {
         c.save(); c.translate(s * .22, -.08); c.rotate(s * .2);
         c.beginPath(); c.ellipse(0, 0, .15, .44, 0, 0, 7); c.fillStyle = '#fff'; c.fill(); c.lineWidth = .025; c.strokeStyle = '#ddd'; c.stroke();
@@ -133,26 +136,26 @@
       }
       c.beginPath(); c.ellipse(0, .5, .5, .12, 0, Math.PI, 0); c.lineWidth = .07; c.strokeStyle = '#ff5fa2'; c.stroke();
     } },
-    kitty: { name: 'Kitty ears', h: .56, draw(c) {
+    kitty: { name: 'Kitty ears', h: .56, face: { at: 'eyes', y: -1.93, s: 2.4 }, draw(c) {
       for (const s of [-1, 1]) {
         c.beginPath(); c.moveTo(s * .12, .2); c.lineTo(s * .3, -.28); c.lineTo(s * .48, .16); c.closePath(); c.fillStyle = '#2b2b2b'; c.fill();
         c.beginPath(); c.moveTo(s * .2, .14); c.lineTo(s * .3, -.14); c.lineTo(s * .41, .12); c.closePath(); c.fillStyle = '#ff9eb5'; c.fill();
       }
       c.beginPath(); c.ellipse(0, .24, .5, .1, 0, Math.PI, 0); c.lineWidth = .06; c.strokeStyle = '#2b2b2b'; c.stroke();
     } },
-    halo: { name: 'Halo', h: .34, draw(c) {
+    halo: { name: 'Halo', h: .34, face: { at: 'eyes', y: -2.3, s: 2.2 }, draw(c) {
       c.save(); c.shadowColor = '#ffe066'; c.shadowBlur = 20;
       c.beginPath(); c.ellipse(0, 0, .45, .12, 0, 0, 7); c.lineWidth = .08; c.strokeStyle = '#ffd23f'; c.stroke(); c.restore();
       c.beginPath(); c.ellipse(0, 0, .45, .12, 0, 0, 7); c.lineWidth = .03; c.strokeStyle = '#fff6c2'; c.stroke();
     } },
-    horns: { name: 'Devil horns', h: .5, draw(c) {
+    horns: { name: 'Devil horns', h: .5, face: { at: 'eyes', y: -1.85, s: 2.4 }, draw(c) {
       for (const s of [-1, 1]) {
         c.beginPath(); c.moveTo(s * .14, .2); c.quadraticCurveTo(s * .12, -.1, s * .42, -.24); c.quadraticCurveTo(s * .3, -.02, s * .36, .2); c.closePath();
         c.fillStyle = '#e5383b'; c.fill(); c.lineWidth = .02; c.strokeStyle = '#8d0801'; c.stroke();
       }
       c.beginPath(); c.ellipse(0, .22, .5, .08, 0, Math.PI, 0); c.lineWidth = .05; c.strokeStyle = '#8d0801'; c.stroke();
     } },
-    flowercrown: { name: 'Flower crown', h: .46, draw(c) {
+    flowercrown: { name: 'Flower crown', h: .46, face: { at: 'eyes', y: -1.5, s: 2.5 }, draw(c) {
       c.beginPath(); c.ellipse(0, .16, .48, .2, 0, Math.PI, 0); c.lineWidth = .03; c.strokeStyle = '#4f772d'; c.stroke();
       const cols = ['#ff8fab', '#ffd166', '#ffffff', '#cdb4db', '#ff8fab', '#ffd166', '#ffffff'];
       for (let i = 0; i < 7; i++) {
@@ -193,7 +196,7 @@
         c.fillStyle = 'rgba(255,255,255,.4)'; c.beginPath(); c.ellipse(x - .06, y - .08, .035, .06, -.4, 0, 7); c.fill();
       });
     } },
-    bubble: { name: 'Speech bubble', h: .62, text: true, draw(c, unit, text) {
+    bubble: { name: 'Speech bubble', h: .62, text: true, face: { at: 'mouth', x: 1.8, y: -1.2, s: 2.6 }, draw(c, unit, text) {
       c.beginPath(); rrect(c, -.5, -.3, 1, .46, .16);
       c.moveTo(-.18, .15); c.lineTo(-.3, .31); c.lineTo(-.02, .15);
       c.fillStyle = '#fff'; c.fill(); c.lineWidth = .03; c.strokeStyle = '#1b1b1b'; c.lineJoin = 'round'; c.stroke();
@@ -223,6 +226,13 @@
   const EMOJI = ['😎', '🥳', '😂', '😍', '🤩', '😜', '🤪', '😘', '👑', '🎩', '🕶️', '🎀', '💋', '👄', '🥸', '🤡', '👻', '💀', '🎃', '🦄',
     '🐶', '🐱', '🐰', '🦊', '🎉', '🎈', '🎂', '🍰', '🍾', '🥂', '🍕', '🍩', '🌈', '⭐', '✨', '💥', '💖', '💯', '🔥', '⚡', '🎵', '📸', '🏆', '🎓', '💍', '🌸', '🌻', '🍀'];
 
+  // emoji that make sense on a face (same units as `face` above)
+  const EMOJI_FIT = {
+    '🕶️': { at: 'eyes', y: .05, s: 2.3 }, '👑': { at: 'eyes', y: -1.9, s: 2.1 }, '🎩': { at: 'eyes', y: -2.1, s: 2.4 },
+    '🎀': { at: 'eyes', x: .7, y: -1.5, s: 1.2 }, '💋': { at: 'mouth', s: 1.1 }, '👄': { at: 'mouth', s: 1.1 },
+    '🥸': { at: 'nose', y: -.1, s: 2.4 }, '🤡': { at: 'nose', s: 2.8 }
+  };
+
   function draw(ctx, id, unit, text) {
     const p = P[id];
     if (!p) return;
@@ -232,5 +242,9 @@
     ctx.restore();
   }
   const LIST = Object.entries(P).filter(([, p]) => !p.text).map(([id, p]) => ({ id, name: p.name, h: p.h }));
-  window.PBProps = { LIST, WORDS, EMOJI, draw, height: (id) => (P[id] ? P[id].h : 1) };
+  window.PBProps = {
+    LIST, WORDS, EMOJI, draw,
+    height: (id) => (P[id] ? P[id].h : 1),
+    fit: (kind, id) => (kind === 'emoji' ? EMOJI_FIT[id] : P[id] && P[id].face) || null
+  };
 })();
