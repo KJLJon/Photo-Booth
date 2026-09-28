@@ -591,14 +591,14 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none'
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -746,7 +746,7 @@
       if (!p._f || p._f.key !== key) p._f = { key, canvas: PBFilters.apply(p.canvas, id, null, adj) };
       out = p._f.canvas;
     }
-    return swapBackground(p, out, key);
+    return paintFaces(p, swapBackground(p, out, key), key);
   }
 
   // ================= background swap =================
@@ -837,6 +837,31 @@
     const k = [key, id, state.theme, state.seed, swapImageId].join('|');
     if (!p._sw || p._sw.key !== k) p._sw = { key: k, canvas: composeSwap(src, p._mask) };
     return p._sw.canvas;
+  }
+  // ---- face paint (js/facepaint.js), placed with the detailed face finder ----
+  const paintOn = () => state.facePaint && state.facePaint !== 'none';
+  function paintFaces(p, src, key) {
+    if (!paintOn()) return src;
+    if (p._mesh === undefined) {
+      p._mesh = null;
+      PBFace.loadMesh().then(ok => { p._mesh = ok ? PBFace.meshes(p.canvas) || [] : false; schedule(); });
+    }
+    if (!p._mesh || !p._mesh.length) return src;
+    const k = [key, state.bgSwap, state.theme, swapImageId, state.facePaint].join('|');
+    if (!p._fpc || p._fpc.key !== k) {
+      const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+      const ctx = c.getContext('2d'); ctx.drawImage(src, 0, 0);
+      p._mesh.forEach(m => PBPaint.draw(ctx, m.map(q => ({ x: q.x * c.width, y: q.y * c.height })), state.facePaint));
+      p._fpc = { key: k, canvas: c };
+    }
+    return p._fpc.canvas;
+  }
+  function setPaint(id) {
+    state.facePaint = id; schedule(); buildPaintChips();
+    if (id !== 'none') { PBFace.loadMesh(); if (!PBFace.meshReady()) toast('🎨 Getting face paint ready…'); }
+  }
+  function buildPaintChips() {
+    chipGroup($('paintChips'), PBPaint.EFFECTS, e => (state.facePaint || 'none') === e.id, e => setPaint(e.id));
   }
   function buildSwapChips() {
     chipGroup($('swapChips'), SCENES, s => state.bgSwap === s.id, s => {
@@ -1192,7 +1217,7 @@
   function applyDesign(d) {
     DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
     if (!THEMES[state.theme] || state.theme === 'photo') state.theme = 'confetti';
-    syncUI(); syncAdj(); markFilters(); buildSlots(); schedule();
+    syncUI(); syncAdj(); markFilters(); buildSlots(); buildSwapChips(); buildPaintChips(); schedule();
   }
   function loadDesigns() { try { return JSON.parse(localStorage.getItem(DESIGNS_KEY) || '[]'); } catch (e) { return []; } }
   function storeDesigns(list) { try { localStorage.setItem(DESIGNS_KEY, JSON.stringify(list)); return true; } catch (e) { toast('Not enough space to save designs'); return false; } }
@@ -3056,6 +3081,9 @@
       if (typeof content === 'string') b.textContent = content; else b.appendChild(content);
       b.addEventListener('click', click); el.appendChild(b);
     };
+    PBPaint.EFFECTS.forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id && e.id !== 'none',
+      () => { setPaint(state.facePaint === e.id ? 'none' : e.id); buildCamProps(); }));
+    const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep);
     add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
     faceChoices().forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
       state.camProps = hasCamProp(c) ? state.camProps.filter(p => !(p.kind === c.kind && p.id === c.id)) : state.camProps.concat({ kind: c.kind, id: c.id });
@@ -3085,18 +3113,30 @@
     const ctx = camOverlay.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, camOverlay.width, camOverlay.height);
     const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
-    const wanted = state.camProps.length || !$('camProps').hidden;
-    const hint = state.camProps.length && !PBFace.ready()
+    const wanted = state.camProps.length || !$('camProps').hidden || paintOn();
+    const hint = (state.camProps.length || paintOn()) && !PBFace.ready()
       ? (PBFace.status === 'failed' ? "Face props aren't available on this device" : `⏳ Getting face props ready… ${Math.round(PBFace.progress * 100)}%`)
       : camHint();
     if ($('camHint').textContent !== hint) $('camHint').textContent = hint;
     if (!wanted || !vw || !PBFace.ready() || !$('camReview').hidden) return;
     const raw = PBFace.detect(camVideo) || [];
     live.count = raw.length;
-    if (!state.camProps.length) return;
     // video pixels → screen: the preview is object-fit: cover, and mirrored for the selfie camera
     const k = Math.max(cw / vw, ch / vh), ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2, mirror = cam.facing === 'user';
     const map = (q) => ({ x: mirror ? cw - (q.x * k + ox) : q.x * k + ox, y: q.y * k + oy });
+    if (paintOn() && PBFace.meshReady()) {
+      // paint needs the face underneath it (it blends with the skin) and must match this exact frame,
+      // so the preview frame itself is drawn here too, with the same crop, mirror and filter
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.save();
+      if (mirror) { ctx.translate(cw, 0); ctx.scale(-1, 1); }
+      if ('filter' in ctx) ctx.filter = camVideo.style.filter || 'none';
+      ctx.drawImage(camVideo, ox, oy, vw * k, vh * k);
+      ctx.restore();
+      (PBFace.meshes(camVideo) || []).forEach(m => PBPaint.draw(ctx, m.map(q => map({ x: q.x * vw, y: q.y * vh })), state.facePaint));
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    if (!state.camProps.length) return;
     const poses = raw.map(f => PBFace.pose({ eye1: map(f.eye1), eye2: map(f.eye2), nose: map(f.nose), mouth: map(f.mouth) }))
       .sort((a, b) => a.pts.eyes.x - b.pts.eyes.x);
     // smooth against last frame so props don't jitter
@@ -3230,7 +3270,7 @@
     const holder = { canvas: frame, zoom: 1, cx: null, cy: null, raw: true };
     const jit = { deg: 0, dx: 0, dy: 0 };
     const faceCache = new WeakMap();   // boomerang frames repeat, so find their faces once
-    const maskCache = new WeakMap(), swapOut = document.createElement('canvas');
+    const maskCache = new WeakMap(), meshCache = new WeakMap(), swapOut = document.createElement('canvas');
     const swapOn = () => state.bgSwap !== 'none' && !(state.bgSwap === 'custom' && !swapImage) && PBFace.segReady();
     const comp = {
       out, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
@@ -3255,6 +3295,11 @@
           raw = !(src instanceof HTMLVideoElement) && faceCache.get(src);
           if (!raw) { raw = PBFace.detect(frame) || []; if (!(src instanceof HTMLVideoElement)) faceCache.set(src, raw); }
         }
+        let mesh = null;
+        if (paintOn() && PBFace.meshReady()) {
+          mesh = !(src instanceof HTMLVideoElement) && meshCache.get(src);
+          if (!mesh) { mesh = PBFace.meshes(frame) || []; if (!(src instanceof HTMLVideoElement)) meshCache.set(src, mesh); }
+        }
         let mask = null;
         if (swapOn()) {
           mask = !(src instanceof HTMLVideoElement) && maskCache.get(src);
@@ -3263,6 +3308,7 @@
         const clipT = (opts.t != null ? opts.t : performance.now()) / 1000;
         PBFilters.applyFrame(fctx, w, h, state.filter, state.adj);
         if (mask) { composeSwap(frame, mask, swapOut); fctx.drawImage(swapOut, 0, 0); }
+        if (mesh) mesh.forEach(m => PBPaint.draw(fctx, m.map(q => ({ x: q.x * w, y: q.y * h })), state.facePaint));
         if (plain) {
           const T = photoXform(holder, L.rects[0], jit, L.border);
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
@@ -3341,6 +3387,12 @@
     $('makingTitle').textContent = `Making your ${plain(m.label).toLowerCase()}…`;
     $('making').hidden = false; syncScroll();
     const pct = (p) => { $('makingPct').textContent = Math.round(Math.min(1, p) * 100) + '%'; };
+    if (paintOn() && !PBFace.meshReady()) {
+      $('makingTitle').textContent = 'Getting face paint ready…';
+      const off = setInterval(() => pct(PBFace.progress), 200);
+      await PBFace.loadMesh();
+      clearInterval(off); pct(0);
+    }
     if (state.bgSwap !== 'none' && !PBFace.segReady()) {
       $('makingTitle').textContent = 'Getting the background swap ready…';
       const off = setInterval(() => pct(PBFace.progress), 200);
@@ -3517,7 +3569,7 @@
   // ================= start =================
   PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); buildSwapChips(); });
   loadSettings();
-  syncAdj(); buildDesigns(); buildSwapChips();
+  syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips();
   setTimeout(readDesignLink, 300);
   buildThemes();
   buildEmojis();

@@ -7,12 +7,13 @@
   const MP_VERSION = '1.0.1';
   const LOCAL = new URL(`vendor/mediapipe-${MP_VERSION}/`, document.baseURI).href;
   const SOURCES = [
-    { lib: LOCAL + 'vision_bundle.mjs', wasm: LOCAL + 'wasm', model: LOCAL + 'blaze_face_short_range.tflite', seg: LOCAL + 'selfie_segmenter.tflite' },
+    { lib: LOCAL + 'vision_bundle.mjs', wasm: LOCAL + 'wasm', model: LOCAL + 'blaze_face_short_range.tflite', seg: LOCAL + 'selfie_segmenter.tflite', mesh: LOCAL + 'face_landmarker.task' },
     {
       lib: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/vision_bundle.mjs`,
       wasm: `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`,
       model: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
-      seg: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite'
+      seg: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite',
+      mesh: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
     }
   ];
 
@@ -164,7 +165,33 @@
     } finally { if (res.close) res.close(); }
   }
 
+  // ---- detailed face shape for face paint (MediaPipe face landmarker: 478 points, ~3.7 MB more) ----
+  let mesher = null, meshLoading = null;
+  function loadMesh() {
+    if (meshLoading) return meshLoading;
+    meshLoading = (async () => {
+      if (!(await load()) || !lib) return false;
+      try {
+        const model = await fetchBytes(lib.src.mesh, () => {});
+        const opts = (delegate) => ({ baseOptions: { modelAssetBuffer: model, delegate }, runningMode: 'IMAGE', numFaces: 6,
+          minFaceDetectionConfidence: 0.4 });
+        try { mesher = await lib.mp.FaceLandmarker.createFromOptions(lib.fileset, opts('GPU')); } catch (e) {
+          mesher = await lib.mp.FaceLandmarker.createFromOptions(lib.fileset, opts('CPU'));
+        }
+        return true;
+      } catch (e) { console.warn('Face shape finder failed to load', e); meshLoading = null; return false; }
+    })();
+    return meshLoading;
+  }
+  // Every face's 478 points, as fractions of the source's width and height (null before it's loaded).
+  function meshes(source) {
+    if (!mesher) return null;
+    try { return (mesher.detect(source).faceLandmarks || []).map(f => f.map(p => ({ x: p.x, y: p.y }))); }
+    catch (e) { console.warn('Face shape finder failed', e); return []; }
+  }
+
   window.PBFace = {
+    loadMesh, meshes, meshReady: () => !!mesher,
     loadSegmenter, personMask, segReady: () => !!segmenter,
     load, detect, pose,
     get status() { return status; },
