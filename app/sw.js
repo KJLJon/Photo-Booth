@@ -18,6 +18,7 @@ const ASSETS = [
   './js/lib/qrcode.js',
   './js/music.js',
   './js/facepaint.js',
+  './js/holidays.js',
   './js/emoji-data.js',
   './js/app.js',
   './stickers/stickers.js'

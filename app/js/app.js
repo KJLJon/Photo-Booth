@@ -28,7 +28,34 @@
   }
   // photo shapes (path only; caller calls beginPath)
   function shapePath(ctx, shape, x, y, w, h, rr) {
-    if (shape === 'oval') {
+    const cx = x + w / 2, cy = y + h / 2, m = Math.min(w, h);
+    const polyPts = (pts) => { pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.closePath(); };
+    if (shape === 'circle') {
+      ctx.moveTo(cx + m / 2, cy); ctx.arc(cx, cy, m / 2, 0, Math.PI * 2);
+    } else if (shape === 'arch') {
+      const R = w / 2;
+      ctx.moveTo(x, y + h); ctx.lineTo(x, y + Math.min(R, h)); ctx.arc(cx, y + Math.min(R, h), R, Math.PI, 0); ctx.lineTo(x + w, y + h); ctx.closePath();
+    } else if (shape === 'hexagon') {
+      polyPts([[x + w * .25, y], [x + w * .75, y], [x + w, cy], [x + w * .75, y + h], [x + w * .25, y + h], [x, cy]]);
+    } else if (shape === 'diamond') {
+      polyPts([[cx, y], [x + w, cy], [cx, y + h], [x, cy]]);
+    } else if (shape === 'star') {
+      const pts = [];
+      for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, k = i % 2 ? .48 : 1; pts.push([cx + Math.cos(a) * w / 2 * k, cy + Math.sin(a) * h / 2 * k * 1.05 + h * .04]); }
+      polyPts(pts);
+    } else if (shape === 'scallop' || shape === 'stamp') {
+      // bumpy edge all the way round (scallops point out, a postage stamp's bites point in)
+      const R0 = m * (shape === 'stamp' ? .035 : .05), inset = shape === 'stamp' ? 0 : R0;
+      const X0 = x + inset, Y0 = y + inset, X1 = x + w - inset, Y1 = y + h - inset;
+      const edge = (ax, ay, bx, by) => {
+        const L = Math.hypot(bx - ax, by - ay), k = Math.max(3, Math.round(L / (R0 * 2.2))), r = L / k / 2, ang = Math.atan2(by - ay, bx - ax);
+        for (let i = 0; i < k; i++) {
+          const t = (i + .5) / k;
+          ctx.arc(ax + (bx - ax) * t, ay + (by - ay) * t, r, ang + Math.PI, ang, shape === 'stamp');
+        }
+      };
+      ctx.moveTo(X0, Y0); edge(X0, Y0, X1, Y0); edge(X1, Y0, X1, Y1); edge(X1, Y1, X0, Y1); edge(X0, Y1, X0, Y0); ctx.closePath();
+    } else if (shape === 'oval') {
       ctx.moveTo(x + w, y + h / 2);
       ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
     } else if (shape === 'heart') {
@@ -545,6 +572,12 @@
       } }
   };
 
+  // holiday backgrounds (js/holidays.js) go before "Your Colors" and "Your Photo"
+  if (window.PBHolidays) {
+    const tail = {}; ['custom', 'photo'].forEach(k => { tail[k] = THEMES[k]; delete THEMES[k]; });
+    Object.assign(THEMES, window.PBHolidays.themes, tail);
+  }
+
   const FONTS = {
     playful: { label: 'Playful', main: '900', sub: '800', fam: ROUNDED, k: .2 },
     bold: { label: 'Bold', main: '900', sub: '700', fam: 'Impact,"Arial Black","Franklin Gothic Heavy",sans-serif', k: .16 },
@@ -553,7 +586,7 @@
     script: { label: 'Script', main: '700', sub: '600', fam: '"Snell Roundhand","Brush Script MT","Segoe Script","Apple Chancery","Dancing Script",cursive', k: .12 }
   };
 
-  const PRESETS = [
+  const PRESETS_BASE = [
     { name: '🎂 Birthday', theme: 'confetti', line1: 'Happy Birthday!', left: '🎈', right: '🎂', font: 'playful' },
     { name: '💍 Wedding', theme: 'blush', line1: 'Just Married', left: '💍', right: '🥂', font: 'script' },
     { name: '🥂 Anniversary', theme: 'gold', line1: 'Happy Anniversary', left: '🥂', right: '💕', font: 'elegant', frame: 'gold' },
@@ -572,6 +605,9 @@
     { name: '💥 Comic book', theme: 'action', line1: 'KA-POW!', left: '💥', right: '⚡', font: 'bold', frame: 'black' },
     { name: '✏️ Blank', theme: 'minwhite', line1: '', left: '', right: '', font: 'classic' }
   ];
+
+  // everyday occasions, then the year's holidays in calendar order, then Blank
+  const PRESETS = PRESETS_BASE.slice(0, -1).concat((window.PBHolidays && window.PBHolidays.presets) || [], PRESETS_BASE.slice(-1));
 
   const EMOJIS = ['🎉', '🎈', '🎂', '🎁', '🥳', '🎊', '✨', '⭐', '❤️', '💕', '💍', '🥂', '🍾', '💐', '🎓', '🏆',
     '🍼', '👶', '🎄', '❄️', '☃️', '🎃', '👻', '🦇', '🎆', '🇺🇸', '🍂', '🦃', '🥧', '🌻', '🌸', '🌈',
@@ -645,6 +681,13 @@
     { id: 'rect', label: '⬛ Square' },
     { id: 'rounded', label: '▢ Rounded' },
     { id: 'oval', label: '⚪ Oval' },
+    { id: 'circle', label: '🔵 Circle' },
+    { id: 'arch', label: '🌈 Arch' },
+    { id: 'hexagon', label: '⬢ Hexagon' },
+    { id: 'diamond', label: '🔷 Diamond' },
+    { id: 'star', label: '⭐ Star' },
+    { id: 'scallop', label: '🌸 Scalloped' },
+    { id: 'stamp', label: '📮 Stamp' },
     { id: 'heart', label: '❤️ Heart' }
   ];
 
@@ -897,6 +940,7 @@
     const ir = innerRect(rect, border);
     const px = -ir.w / 2, py = -rect.h / 2;              // photo box, top-left
     const photoR = shape === 'rounded' ? Math.min(ir.w, ir.h) * 0.08 : 0;
+    const curvy = shape !== 'rect' && shape !== 'rounded';     // frame follows the outline instead of a box
 
     ctx.save();
     ctx.translate(rect.x + rect.w / 2 + jit.dx, rect.y + rect.h / 2 + jit.dy);
@@ -914,14 +958,14 @@
       const side = style === 'film' ? b + border * 2.2 : b;
       const cardR = style === 'film' ? border * 0.4 : border * 0.5;
       shapePath(ctx, 'rect', -rect.w / 2 - side, -rect.h / 2 - b, rect.w + 2 * side, rect.h + 2 * b, cardR);
-    } else if (shape === 'heart' || shape === 'oval') {
+    } else if (curvy) {
       shapePath(ctx, shape, px, py, ir.w, ir.h, 0);
     } else {
       const rr = shape === 'rounded' ? photoR + b : (b ? b * 0.8 : 0);
       shapePath(ctx, shape, px - b, py - b, ir.w + 2 * b, ir.h + 2 * b, rr);
     }
     if (fill || state.shadow) ctx.fill();
-    if (!card && b && (shape === 'heart' || shape === 'oval')) {
+    if (!card && b && curvy) {
       // even-width outline that follows the curve (drawn after the fill so the shadow sits underneath)
       ctx.strokeStyle = fill; ctx.lineWidth = b * 2; ctx.lineJoin = 'round';
       ctx.stroke();
