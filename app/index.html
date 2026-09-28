@@ -304,7 +304,10 @@
 
   <section id="videoSection" class="only-video">
     <h2>🎬 Your video</h2>
+    <div class="btnrow"><button type="button" id="vidDragBtn" aria-pressed="false">✋ Move / zoom the video</button></div>
+    <div class="chips fit-chips" id="vidDrag" hidden></div>
     <div class="preview-wrap vid"><canvas id="vidPreview"></canvas></div>
+    <p class="size-note" id="vidDragHint" hidden></p>
     <p class="hint" id="vidPrevHint">Change the background, message, filters, face paint or stickers above and this preview follows along.
       Tap <b>Remake video</b> to rebuild it (takes a few seconds).</p>
     <div class="btnrow">
@@ -556,6 +559,8 @@
     <h2 id="sheetTitle">Your picture is ready 🎉</h2>
     <div class="chips save-modes" id="saveModes" hidden></div>
     <img id="savedImg" alt="Your photo booth picture">
+    <canvas id="cropCv" class="crop-cv" hidden aria-label="Drag to choose what the cropped picture keeps"></canvas>
+    <p class="size-note" id="cropHint" hidden>✋ Drag the frame to choose what's kept · pinch or scroll to zoom · <button type="button" class="linkish" id="cropReset">Reset</button></p>
     <div class="save-picks" id="savePicks" hidden></div>
     <div id="saveSizeRow">
       <div class="size-chips" id="saveSizes" role="group" aria-label="Size for social media"></div>

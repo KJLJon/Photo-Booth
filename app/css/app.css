@@ -230,6 +230,10 @@ body.mode-video .only-photo, body.mode-photo .only-video { display: none !import
 .size-chips .shape.orig { border-style: dashed; }
 .fit-chips { justify-content: center; margin-top: 6px; }
 .fit-chips .chip { padding: 5px 10px; font-size: .78rem; }
+.crop-cv { display: block; max-width: 100%; max-height: 55vh; margin: 0 auto; border-radius: 8px; touch-action: none; cursor: grab; background: #f6f0fb; }
+#vidPreview.draggable { touch-action: none; cursor: grab; }
+.crop-cv:active { cursor: grabbing; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .size-note { font-size: .78rem; color: #6b5a7a; margin: 4px 0 0; min-height: 1em; }
 .save-modes .chip { padding: 7px 12px; font-size: .85rem; }
 .save-picks { display: flex; gap: 8px; justify-content: center; margin-top: 8px; overflow-x: auto; }

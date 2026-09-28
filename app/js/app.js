@@ -712,14 +712,15 @@
     bgDim: 0.2, preset: 0,
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
-    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: '', cuts: []
+    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: '', cuts: [],
+    vidFrame: { zoom: 1, cx: null, cy: null }, vidCrop: { x: .5, y: .5, z: 1 }
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts', 'vidFrame', 'vidCrop'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -1524,7 +1525,7 @@
 
   // ---- my designs: everything except the photos, saved on this device ----
   const DESIGNS_KEY = 'photobooth-designs-v1';
-  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone', 'lastCollage', 'lastBooth', 'boothStash'].includes(k)).concat('camProps');
+  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone', 'lastCollage', 'lastBooth', 'boothStash', 'vidFrame', 'vidCrop'].includes(k)).concat('camProps');
   function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { if (state[k] !== undefined) d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
   function applyDesign(d) {
     DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
@@ -2064,10 +2065,10 @@
   }
   const toJpeg = (cv) => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
   // Resize a finished picture to a social-media size: fit inside (edges blurred / white / black) or crop to fill.
-  function fitInto(ctx, src, W, H, fit, scratch) {
+  function fitInto(ctx, src, W, H, fit, scratch, crop) {
     const sw = src.width, sh = src.height;
     if (fit === 'fill') {
-      const k = Math.max(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k); return;
+      const f = cropFrame(sw, sh, W, H, crop); ctx.drawImage(src, -f.x * f.k, -f.y * f.k, sw * f.k, sh * f.k); return;
     }
     if (fit === 'blur') {
       const t = scratch || document.createElement('canvas'); t.width = 24; t.height = Math.max(1, Math.round(24 * H / W));
@@ -2078,11 +2079,69 @@
     } else { ctx.fillStyle = fit === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, W, H); }
     const k = Math.min(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k);
   }
-  function toSocial(src, id, fit) {
+  function toSocial(src, id, fit, crop) {
     if (!id || id === 'orig') return src;
     const Z = sizeOf(id), cv = document.createElement('canvas'); cv.width = Z.w; cv.height = Z.h;
-    fitInto(cv.getContext('2d'), src, Z.w, Z.h, fit);
+    fitInto(cv.getContext('2d'), src, Z.w, Z.h, fit, null, crop);
     return cv;
+  }
+  // "Crop to fill": which part of the picture is kept. crop = { x, y } (0…1: left/top → right/bottom of
+  // the spare room) and z (zoom, 1 = as big as fits). Returns the kept area in picture pixels and its scale.
+  const CROP0 = { x: .5, y: .5, z: 1 };
+  function cropFrame(sw, sh, W, H, crop) {
+    const c = crop || CROP0, k = Math.max(W / sw, H / sh) * (c.z || 1), w = W / k, h = H / k;
+    return { x: (sw - w) * c.x, y: (sh - h) * c.y, w, h, k };
+  }
+  // The whole picture with a frame on it: drag the frame (or the picture) to choose what's kept,
+  // pinch / scroll to zoom in. cv._crop remembers what's shown so the pointer code can move it.
+  function drawCropView(cv, src, W, H, crop) {
+    const k0 = Math.min(1, 720 / Math.max(src.width, src.height));
+    cv.width = Math.round(src.width * k0); cv.height = Math.round(src.height * k0);
+    const c = cv.getContext('2d'), f = cropFrame(src.width, src.height, W, H, crop);
+    const fx = f.x * k0, fy = f.y * k0, fw = f.w * k0, fh = f.h * k0, lw = Math.max(2, cv.width / 180);
+    c.drawImage(src, 0, 0, cv.width, cv.height);
+    c.fillStyle = 'rgba(20,10,31,.62)'; c.beginPath(); c.rect(0, 0, cv.width, cv.height); c.rect(fx, fy, fw, fh); c.fill('evenodd');
+    c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = lw / 2; c.beginPath();
+    for (const t of [1 / 3, 2 / 3]) { c.moveTo(fx + fw * t, fy); c.lineTo(fx + fw * t, fy + fh); c.moveTo(fx, fy + fh * t); c.lineTo(fx + fw, fy + fh * t); }
+    c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = lw; c.strokeRect(fx, fy, fw, fh);
+    const L = Math.min(fw, fh) * .12; c.lineWidth = lw * 2.2; c.beginPath();       // corner marks
+    [[fx, fy, 1, 1], [fx + fw, fy, -1, 1], [fx, fy + fh, 1, -1], [fx + fw, fy + fh, -1, -1]].forEach(([x, y, a, b]) => { c.moveTo(x + a * L, y); c.lineTo(x, y); c.lineTo(x, y + b * L); });
+    c.stroke();
+    cv._crop = { src, W, H, crop, k0 };
+  }
+  // pointer / wheel handling for a crop view; get() returns the crop object to change, done() runs after a change
+  function cropControls(cv, redraw, done) {
+    const pts = new Map(); let pinch0 = 0, z0 = 1, wheelT = 0;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const scale = () => cv.getBoundingClientRect().width / cv.width;
+    function move(dx, dy) {
+      const C = cv._crop; if (!C) return;
+      const f = cropFrame(C.src.width, C.src.height, C.W, C.H, C.crop), k = C.k0 * scale();
+      const rx = C.src.width - f.w, ry = C.src.height - f.h;
+      if (rx > 1) C.crop.x = clamp((f.x + dx / k) / rx, 0, 1);
+      if (ry > 1) C.crop.y = clamp((f.y + dy / k) / ry, 0, 1);
+    }
+    cv.addEventListener('pointerdown', (e) => {
+      if (!cv._crop) return;
+      cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); z0 = cv._crop.crop.z || 1; }
+      e.preventDefault();
+    });
+    cv.addEventListener('pointermove', (e) => {
+      const p = pts.get(e.pointerId); if (!p || !cv._crop) return;
+      if (pts.size === 1) move(e.clientX - p.x, e.clientY - p.y);
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()]; cv._crop.crop.z = clamp(z0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch0, 1, 4); }
+      redraw();
+    });
+    const up = (e) => { if (!pts.delete(e.pointerId)) return; if (pts.size < 2) pinch0 = 0; if (!pts.size) done(); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => {
+      if (!cv._crop) return; e.preventDefault();
+      const c = cv._crop.crop; c.z = clamp((c.z || 1) * Math.exp(-e.deltaY * .0015), 1, 4); redraw();
+      clearTimeout(wheelT); wheelT = setTimeout(done, 250);
+    }, { passive: false });
   }
   // the size picker on the save screen: a little shape for each size so you can see how tall / wide it is
   const FITS = [{ id: 'blur', label: '🌫️ Blur edges' }, { id: 'white', label: '⬜ White' }, { id: 'black', label: '⬛ Black' }, { id: 'fill', label: '✂️ Crop to fill' }];
@@ -2128,13 +2187,16 @@
     return cv;
   }
   // Every size made on the save screen is kept (per size & fit), so flipping between them is instant.
-  const save = { mode: 'booth', pick: 0, strip: null, photos: [], strips: {}, photoSets: {} };
-  const sizeKey = () => state.saveSize === 'orig' ? 'orig' : state.saveSize + '|' + state.saveFit;
+  const save = { mode: 'booth', pick: 0, strip: null, photos: [], strips: {}, photoSets: {}, crops: {}, srcs: {} };
+  const cropping = () => save.mode !== 'print' && state.saveSize !== 'orig' && state.saveFit === 'fill';
+  const sizeKey = () => state.saveSize === 'orig' ? 'orig' : state.saveSize + '|' + state.saveFit + (cropping() ? '|' + JSON.stringify(save.crops) : '');
+  const saveCropOf = (which) => save.crops[which] || (save.crops[which] = { ...CROP0 });
+  const photoSrc = (i) => save.srcs[i] || (save.srcs[i] = composePhotoOnly(i));
   async function buildSaveSheet() {
     const name = `photobooth-${save.stamp}`, key = sizeKey();
     save.strip = save.strips[key] || null; save.photos = save.photoSets[key] || [];
     if (save.mode === 'booth') {
-      if (!save.strip) { render(); save.strip = save.strips[key] = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit)); }
+      if (!save.strip) { render(); save.strip = save.strips[key] = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit, saveCropOf('booth'))); }
       if (!save.strip) { toast('Could not create the image'); return; }
       showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
     } else if (save.mode === 'print') {
@@ -2144,7 +2206,7 @@
         'Print at 4×6 in (10×15 cm), "fit to page" off, on a printer or at a photo kiosk.', true);
     } else {
       const idx = filledIdx();
-      if (!save.photos.length) save.photos = save.photoSets[key] = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(composePhotoOnly(i), state.saveSize, state.saveFit))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
+      if (!save.photos.length) save.photos = save.photoSets[key] = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(photoSrc(i), state.saveSize, state.saveFit, saveCropOf(i)))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
       save.pick = Math.min(save.pick, save.photos.length - 1);
       const f = save.photos[save.pick];
       showSaveSheet(f, f.name, 'Your photos 📷', photoHint(), true);
@@ -2168,6 +2230,13 @@
     $('saveFits').hidden = state.saveSize === 'orig';
     const Z = SIZES.find(z => z.id === state.saveSize);
     $('sizeNote').textContent = Z ? `${Z.w}×${Z.h} · ${Z.hint}` : 'Exactly as you made it. Pick a size to fit a social app.';
+    // crop to fill: show the whole picture with a frame to drag
+    const cv = $('cropCv'), crop = cropping();
+    im.hidden = crop; cv.hidden = $('cropHint').hidden = !crop;
+    if (crop) {
+      const i = filledIdx()[save.pick], photo = save.mode === 'photos';
+      drawCropView(cv, photo ? photoSrc(i) : canvas, Z.w, Z.h, saveCropOf(photo ? i : 'booth'));
+    } else cv._crop = null;
     im.onload = () => {
       // the "Original" shape follows the picture being saved (a single photo's own shape in Photos)
       if (state.saveSize !== 'orig') return;
@@ -2179,18 +2248,20 @@
       m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
   }
   const resave = () => { saveSettings(); buildSaveSheet(); };
+  cropControls($('cropCv'), () => { const C = $('cropCv')._crop; if (C) drawCropView($('cropCv'), C.src, C.W, C.H, C.crop); }, () => buildSaveSheet());
+  $('cropReset').addEventListener('click', () => { const C = $('cropCv')._crop; if (C) { Object.assign(C.crop, CROP0); buildSaveSheet(); } });
   $('save').addEventListener('click', () => {
-    Object.assign(save, { strip: null, print: null, photos: [], strips: {}, photoSets: {}, pick: 0, stamp: stamp(), origR: 0 });
+    Object.assign(save, { strip: null, print: null, photos: [], strips: {}, photoSets: {}, crops: {}, srcs: {}, pick: 0, stamp: stamp(), origR: 0 });
     buildSaveSheet();
   });
   // one tap: the design (or the chosen photo) in every social size at once
   $('saveAll').addEventListener('click', async () => {
     const btn = $('saveAll'), i = filledIdx()[save.pick];
-    const photo = save.mode === 'photos', src = photo ? composePhotoOnly(i) : (render(), canvas);
+    const photo = save.mode === 'photos', src = photo ? photoSrc(i) : (render(), canvas), crop = saveCropOf(photo ? i : 'booth');
     const base = `photobooth-${save.stamp}` + (photo ? `-photo${i + 1}` : '');
     btn.disabled = true; btn.textContent = '⏳ Making sizes…';
     const files = [];
-    for (const z of SIZES) files.push(new File([await toJpeg(toSocial(src, z.id, state.saveFit))], `${base}-${z.id}-${z.w}x${z.h}.jpg`, { type: 'image/jpeg' }));
+    for (const z of SIZES) files.push(new File([await toJpeg(toSocial(src, z.id, state.saveFit, crop))], `${base}-${z.id}-${z.w}x${z.h}.jpg`, { type: 'image/jpeg' }));
     btn.disabled = false; btn.textContent = '📦 Every size';
     if ((isIOS || isAndroid) && navigator.canShare && navigator.canShare({ files })) { try { await navigator.share({ files }); } catch (err) { /* cancelled */ } return; }
     for (const f of files) {
@@ -3988,7 +4059,7 @@
     const blurTmp = document.createElement('canvas');
     const frame = document.createElement('canvas');
     const fctx = frame.getContext('2d', { willReadFrequently: true });
-    const holder = { canvas: frame, zoom: 1, cx: null, cy: null, raw: true };
+    const vf = state.vidFrame || {}, holder = { canvas: frame, zoom: vf.zoom || 1, cx: vf.cx, cy: vf.cy, raw: true };
     const jit = { deg: 0, dx: 0, dy: 0 };
     const faceCache = new WeakMap();   // boomerang frames repeat, so find their faces once
     const maskCache = new WeakMap(), meshCache = new WeakMap(), swapOut = document.createElement('canvas');
@@ -3996,6 +4067,8 @@
     const comp = {
       out, stage, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
       track: new Map(), raw: null,
+      // how the clip sits in its window: the crop (in clip pixels) and clip pixels per picture pixel
+      frameFit() { const ir = innerRect(L.rects[0], L.border), c = cropFor(holder, ir.w / ir.h); return { c, per: c.sw / ir.w, fw: frame.width, fh: frame.height }; },
       // faces found in the last frame, in picture coordinates
       facesOf(raw) { return raw ? placeFaces(raw, photoXform(holder, L.rects[0], jit, L.border), 0, W, H) : null; },
       draw(src, mirror, opts = {}) {
@@ -4050,7 +4123,7 @@
           if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
           drawEdge(octx, W, H);
         }
-        if (Z) fitInto(out.getContext('2d'), stage, out.width, out.height, state.vidFit, blurTmp);
+        if (Z) fitInto(out.getContext('2d'), stage, out.width, out.height, state.vidFit, blurTmp, state.vidCrop);
         if (comp.collect && opts.stickers !== false) {
           const now = opts.t != null ? opts.t : performance.now();
           if (now - comp.lastGrab >= comp.gifDelay - 1) {
@@ -4203,7 +4276,7 @@
     }
   }
   // ---- "Your video" on the main page: live design preview + remake, and the clip kept on the device ----
-  const designSig = () => JSON.stringify([designOf(), state.vplain, state.music, state.adj, state.bgSwap, state.facePaint, swapImageId]);
+  const designSig = () => JSON.stringify([designOf(), state.vplain, state.music, state.adj, state.bgSwap, state.facePaint, swapImageId, state.vidFrame, state.vidCrop]);
   let vidPrevTimer = 0;
   function videoPreviewSoon() { if (!cam.last) return; clearTimeout(vidPrevTimer); vidPrevTimer = setTimeout(drawVideoPreview, 250); }
   function clipStill(clip) { return clip.frames ? clip.frames[Math.floor(clip.frames.length / 2)] : clip.still; }
@@ -4220,6 +4293,65 @@
     x.fillStyle = '#5b4a73'; x.font = '700 30px system-ui, sans-serif'; x.textAlign = 'center'; x.fillText('Your video goes here', 320, 60);
     return (placeholder = c);
   }
+  // What dragging on the video preview does: move the clip inside its window (booth design), or pick
+  // what a "crop to fill" size keeps. Both are possible with the booth design + a cropped size.
+  let vidDragPick = 'frame', vidDragOn = false;          // off by default so the page still scrolls over the preview
+  function vidDragMode() {
+    if (!vidDragOn) return '';
+    const crop = state.vidSize !== 'orig' && state.vidFit === 'fill';
+    if (state.vplain) return crop ? 'crop' : '';
+    return crop && vidDragPick === 'crop' ? 'crop' : 'frame';
+  }
+  function buildVidDrag(how) {
+    const crop = state.vidSize !== 'orig' && state.vidFit === 'fill', both = !state.vplain && crop;
+    $('vidDragBtn').hidden = state.vplain && !crop;
+    $('vidDragBtn').textContent = vidDragOn ? '✅ Done moving' : crop ? '✋ Move / crop the video' : '✋ Move / zoom the video';
+    $('vidDragBtn').setAttribute('aria-pressed', String(vidDragOn));
+    $('vidDrag').hidden = !both || !vidDragOn;
+    if (both) chipGroup($('vidDrag'), [{ id: 'frame', label: '🎬 Move video in its window' }, { id: 'crop', label: '✂️ Choose the crop' }],
+      o => o.id === how, o => { vidDragPick = o.id; drawVideoPreview(); });
+    $('vidDragHint').hidden = !how;
+    $('vidDragHint').innerHTML = how === 'crop' ? '✋ Drag the frame to choose what the ' + plain(labelOf(SIZES, state.vidSize)) + ' video keeps · pinch or scroll to zoom · <button type="button" class="linkish" data-reset="crop">Reset</button>'
+      : how ? '✋ Drag the video to choose what shows in its window · pinch or scroll to zoom · <button type="button" class="linkish" data-reset="frame">Reset</button>' : '';
+  }
+  $('vidDragBtn').addEventListener('click', () => { vidDragOn = !vidDragOn; drawVideoPreview(); });
+  $('vidDragHint').addEventListener('click', (e) => {
+    const r = e.target.dataset && e.target.dataset.reset; if (!r) return;
+    if (r === 'crop') state.vidCrop = { ...CROP0 }; else state.vidFrame = { zoom: 1, cx: null, cy: null };
+    saveSettings(); drawVideoPreview();
+  });
+  let vidDrawQ = 0;
+  const vidPreviewNextFrame = () => { if (!vidDrawQ) vidDrawQ = requestAnimationFrame(() => { vidDrawQ = 0; drawVideoPreview(); }); };
+  cropControls($('vidPreview'), vidPreviewNextFrame, () => { saveSettings(); drawVideoPreview(); });
+  (function () {
+    const cv = $('vidPreview'), pts = new Map(); let pinch0 = 0, z0 = 1, wheelT = 0;
+    const setFrame = (f, cx, cy, zoom) => { state.vidFrame = { zoom: Math.max(1, Math.min(ZMAX, zoom)), cx, cy }; };
+    cv.addEventListener('pointerdown', (e) => {
+      if (!cv._frame) return;
+      cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); z0 = state.vidFrame.zoom || 1; }
+      e.preventDefault();
+    });
+    cv.addEventListener('pointermove', (e) => {
+      const p = pts.get(e.pointerId), F = cv._frame; if (!p || !F) return;
+      if (pts.size === 1) {
+        const css = cv.getBoundingClientRect().width / cv.width;                 // screen px per preview px
+        const toClip = F.per / (F.k * css);                                       // screen px → clip px
+        const cx = F.c.cx - (e.clientX - p.x) * toClip / F.fw, cy = F.c.cy - (e.clientY - p.y) * toClip / F.fh;
+        setFrame(F, cx, cy, state.vidFrame.zoom || 1);
+      }
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()]; setFrame(F, F.c.cx, F.c.cy, z0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch0); }
+      vidPreviewNextFrame();
+    });
+    const up = (e) => { if (!pts.delete(e.pointerId)) return; if (pts.size < 2) pinch0 = 0; if (!pts.size) { saveSettings(); drawVideoPreview(); } };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => {
+      const F = cv._frame; if (!F) return; e.preventDefault();
+      setFrame(F, F.c.cx, F.c.cy, (state.vidFrame.zoom || 1) * Math.exp(-e.deltaY * .0015)); vidPreviewNextFrame();
+      clearTimeout(wheelT); wheelT = setTimeout(() => { saveSettings(); drawVideoPreview(); }, 250);
+    }, { passive: false });
+  })();
   function drawVideoPreview() {
     const L = cam.last;
     if (state.appMode === 'video') buildVidSettings();
@@ -4228,8 +4360,19 @@
     const comp = videoComposer(state.vplain); comp.collect = false;
     comp.draw(src, false, { t: 0 });
     const out = $('vidPreview'), k = Math.min(1, 540 / Math.max(comp.out.width, comp.out.height));
-    out.width = Math.round(comp.out.width * k); out.height = Math.round(comp.out.height * k);
-    out.getContext('2d').drawImage(comp.out, 0, 0, out.width, out.height);
+    const how = vidDragMode(), Z = state.vidSize !== 'orig' ? sizeOf(state.vidSize) : null;
+    if (how === 'crop') drawCropView(out, comp.stage, Z.w, Z.h, state.vidCrop);
+    else {
+      out.width = Math.round(comp.out.width * k); out.height = Math.round(comp.out.height * k);
+      out.getContext('2d').drawImage(comp.out, 0, 0, out.width, out.height);
+      out._crop = null;
+    }
+    // for dragging the clip around its window: preview pixels → clip pixels
+    const kfit = !Z ? 1 : state.vidFit === 'fill' ? cropFrame(comp.W, comp.H, comp.out.width, comp.out.height, state.vidCrop).k
+      : Math.min(comp.out.width / comp.W, comp.out.height / comp.H);
+    out._frame = how === 'frame' ? { ...comp.frameFit(), k: k * kfit } : null;
+    out.classList.toggle('draggable', !!how);
+    buildVidDrag(how);
     const dirty = !!vid.url && vid.sig !== designSig();
     $('vidPrevHint').classList.toggle('dirty', dirty);
     $('vidPrevHint').innerHTML = dirty
