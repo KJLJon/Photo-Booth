@@ -11,6 +11,17 @@ strobe, slow-mo or 360° clip and save it as a video or GIF. Everything happens 
 - In the sticker studio, 🔗 sticks or unsticks the selected sticker (emoji too), and 👥 copies it
   onto every face. Drag a stuck prop onto another face to move it there.
 
+**Stickers & text** (on photo strips and videos):
+- Built-in props, 30 SVG stickers (googly eyes, dog/cat/pig noses, hats, food, party) and every
+  emoji up to Emoji 15, with categories and search.
+- Your own text, with any colour and a choice of fonts. Change the words with ✏️ or by double-clicking.
+- Stickers get a die-cut outline (white by default, any colour, or none).
+- Drag to move. Pinch, or drag the round corner handle, to resize and turn. With a mouse,
+  scroll to resize and shift+scroll to turn.
+
+To add a sticker, drop an SVG into `app/stickers/` and add a line to `app/stickers/stickers.js`
+(add a `face` entry if it should snap onto faces). `scripts/build-emoji.mjs` rebuilds the emoji list.
+
 ## Hosting on GitHub Pages
 
 1. In the repo, go to **Settings → Pages** and set **Source** to **GitHub Actions**.
@@ -30,11 +41,13 @@ Every project site on `<user>.github.io` shares one origin, so the app keeps to 
   across the origin, so no other app should use that key.
 - All paths are relative, so renaming the repo or using a custom domain needs no changes.
 
-### Updates
+### Updates & offline
 
-The workflow stamps `app/sw.js` with the commit hash, so each deploy gets a fresh cache. Open apps
-show a **✨ New version ready → Update** bar instead of reloading on their own, so nobody loses a
-half-made strip.
+The workflow stamps `app/sw.js` with the commit hash, so each deploy gets a fresh cache. The app
+checks for a new version when it's opened or brought back to the screen (and every 30 minutes).
+New versions install in the background and switch over by themselves. If photos are loaded, a
+**Reload** bar appears instead, so nobody loses a half-made strip. The app and all stickers
+work offline after the first visit.
 
 ## Project layout
 
@@ -48,6 +61,8 @@ app/                  ← everything that gets published
   js/filters.js       ← photo filters
   js/encoders.js      ← GIF / animated PNG encoders
   js/face.js          ← face finder (MediaPipe BlazeFace, loaded only when needed)
+  js/emoji-data.js    ← emoji list (generated)
+  stickers/           ← SVG sticker pack + stickers.js catalog
   icons/              ← app icons
   vendor/             ← face-tracking runtime, downloaded at build time (not committed)
 scripts/fetch-vendor.sh

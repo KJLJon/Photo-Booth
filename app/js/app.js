@@ -1774,6 +1774,7 @@
   const stc = $('stCanvas');
   function openStickers(opts) {
     stEd.list = opts.list; stEd.base = opts.getBase(); stEd.onDone = opts.onDone; stEd.sel = -1;
+    if (opts.tab) stEd.tab = opts.tab;
     stEd.before = JSON.stringify(stEd.list);
     stEd.getFaces = opts.getFaces || null; stEd.faces = stEd.getFaces ? stEd.getFaces() : null;
     $('stickerEd').hidden = false; syncScroll();
@@ -2097,8 +2098,9 @@
     const pt = stLocal(e), i = hitSticker(stEd.list, pt.x, pt.y, stEd.view.w, stEd.view.h);
     if (i >= 0) { stEd.sel = i; editText(); }
   });
-  function openPhotoStickers() {
+  function openPhotoStickers(tab) {
     openStickers({
+      tab: typeof tab === 'string' ? tab : null,
       list: curStickers(),
       getBase: () => { const c = document.createElement('canvas'); composeInto(c, false); return c; },
       getFaces: () => {
@@ -2110,6 +2112,8 @@
   }
   $('openStickers').addEventListener('click', openPhotoStickers);
   $('previewStickers').addEventListener('click', openPhotoStickers);
+  $('openText').addEventListener('click', () => openPhotoStickers('words'));
+  $('previewText').addEventListener('click', () => openPhotoStickers('words'));
   $('clearStickers').addEventListener('click', () => {
     const list = curStickers();
     if (!list.length || !confirm('Remove all stickers from this layout?')) return;
@@ -2709,12 +2713,12 @@
   // apps on the same site. A new version installs in the background and takes over; the page reloads
   // right away if nothing is in progress, otherwise it offers a one-tap reload so no photos are lost.
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-    const hadController = !!navigator.serviceWorker.controller;
+    let controlled = !!navigator.serviceWorker.controller;
     let reloading = false;
     const reload = () => { if (!reloading) { reloading = true; location.reload(); } };
     const busy = () => state.photos.some(Boolean) || OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController) return;                               // first install, nothing to refresh
+      if (!controlled) { controlled = true; return; }            // first install taking over: nothing to refresh
       if (busy()) $('updateBar').hidden = false; else reload();
     });
     $('updateBtn').addEventListener('click', reload);
