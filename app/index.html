@@ -26,7 +26,8 @@
   <h1>📸 Photo Booth ✨</h1>
   <p>Add photos · make it yours · save</p>
   <div class="app-mode" id="appMode" role="tablist" aria-label="What are you making?">
-    <button type="button" data-mode="photo" role="tab">📸 Photos</button>
+    <button type="button" data-mode="booth" role="tab">🎞️ Photo booth</button>
+    <button type="button" data-mode="collage" role="tab">▦ Collage</button>
     <button type="button" data-mode="video" role="tab">🎥 Video</button>
   </div>
 </header>
@@ -35,7 +36,6 @@
 
   <section class="only-photo" id="photosSection">
     <h2>📷 Your photos</h2>
-    <div class="chips seg" id="boothMode"></div>
     <div class="counts-row"><span id="countsLabel" hidden>Photos:</span><div class="chips" id="counts"></div></div>
     <div class="slots" id="slots"></div>
     <div class="row" style="flex-wrap:nowrap">
@@ -58,25 +58,40 @@
     <div class="btnrow"><button id="openVid" type="button" class="primary vidbtn">🎥 Record a video</button></div>
   </section>
 
-  <details class="card only-photo" data-key="layout">
+  <details class="card only-booth" data-key="layout">
     <summary><span>🧩 Layout &amp; style</span><span class="val" id="sum-layout"></span></summary>
     <div class="body">
-    <h3 style="margin-top:0">Photo booth layouts</h3>
+    <h3 style="margin-top:0">Layout</h3>
     <div class="chips" id="layouts"></div>
-    <h3>Collages <span style="font-weight:600">· 1 to 9 photos</span></h3>
-    <div class="chips" id="collages"></div>
-    <div id="collageOpts" hidden>
-      <h3>Collage size</h3>
-      <div class="chips" id="collageSizes"></div>
-      <p class="hint" style="text-align:left" id="collageSizeHint"></p>
-      <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
-      <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
-      <div class="btnrow"><button type="button" id="cutOpen">✂️ Draw your own lines</button></div>
-    </div>
+    <h3>Slices <span style="font-weight:600">· cut the photo area at an angle</span></h3>
+    <div class="chips" id="boothSlices"></div>
+    <p class="hint" style="text-align:left" id="styleNote" hidden></p>
+    <div id="styleRows">
     <h3>Photo style</h3>
     <div class="chips" id="styles"></div>
     <h3>Photo shape</h3>
     <div class="chips" id="shapes"></div>
+    </div>
+    </div>
+  </details>
+
+  <details class="card only-collage" data-key="collage">
+    <summary><span>▦ Collage design</span><span class="val" id="sum-collage"></span></summary>
+    <div class="body">
+    <h3 style="margin-top:0">Straight</h3>
+    <div class="chips" id="collages"></div>
+    <h3>Angled</h3>
+    <div class="chips" id="collagesAngled"></div>
+    <div class="btnrow"><button type="button" id="cutOpen">✂️ Draw your own lines</button></div>
+    <h3>Size</h3>
+    <div class="chips" id="collageSizes"></div>
+    <p class="hint" style="text-align:left" id="collageSizeHint"></p>
+    <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
+    <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
+    <div id="collageShapeRow">
+    <h3>Photo shape</h3>
+    <div class="chips" id="collageShapes"></div>
+    </div>
     </div>
   </details>
 
@@ -156,6 +171,7 @@
   <details class="card" data-key="message">
     <summary><span>✏️ Message</span><span class="val" id="sum-message"></span></summary>
     <div class="body">
+    <label class="check only-collage" style="margin-top:0"><input type="checkbox" id="msgOnCollage"> Show the message &amp; icons on the collage</label>
     <label class="field">Main message
       <input type="text" id="line1" maxlength="40">
     </label>
@@ -283,16 +299,17 @@
 
   <section id="previewSection" class="only-photo">
     <h2>👀 Preview</h2>
+    <p class="paint-badge" id="paintBadge" hidden><span></span> <button type="button" class="linkbtn">Remove</button></p>
     <div class="preview-wrap"><canvas id="preview"></canvas></div>
     <p class="hint">Tap a photo in the preview to change, move or zoom it.</p>
     <div class="btnrow"><button type="button" id="previewStickers">😎 Stickers &amp; props</button><button type="button" id="previewText">🔤 Add text</button></div>
   </section>
 
-  <details class="card only-photo" data-key="party">
+  <details class="card only-booth" data-key="party">
     <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
     <div class="body">
       <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
-        4-shot countdown, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
+        a countdown for each shot, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
       <div class="btnrow">
         <button type="button" class="primary" id="partyStart">🎉 Start party mode</button>
         <button type="button" id="galleryOpen">📚 Gallery</button>
@@ -304,6 +321,7 @@
     <h2>🎬 Your video</h2>
     <div class="btnrow"><button type="button" id="vidDragBtn" aria-pressed="false">✋ Move / zoom the video</button></div>
     <div class="chips fit-chips" id="vidDrag" hidden></div>
+    <p class="paint-badge" id="paintBadgeV" hidden><span></span> <button type="button" class="linkbtn">Remove</button></p>
     <div class="preview-wrap vid"><canvas id="vidPreview"></canvas></div>
     <p class="size-note" id="vidDragHint" hidden></p>
     <p class="hint" id="vidPrevHint">Change the background, message, filters, face paint or stickers above and this preview follows along.
@@ -345,6 +363,8 @@
     </div>
     <h3 style="text-align:left;margin:14px 0 6px">Filter for this photo</h3>
     <div class="chips hscroll" id="pmFilters" style="grid-template-rows:auto"></div>
+    <h3 style="text-align:left;margin:14px 0 6px">Face paint for this photo</h3>
+    <div class="chips hscroll" id="pmPaint" style="grid-template-rows:auto"></div>
     <button type="button" class="cancel" id="pmCancel">Cancel</button>
   </div>
 </div>
@@ -485,19 +505,22 @@
   </div>
   <div class="dlbar" id="stFaceBar" hidden><i></i></div>
   <canvas id="stCanvas"></canvas>
+  <div class="st-bottom" id="stBottom">
   <div class="st-panel" id="stTools" hidden>
     <div class="st-tools">
-      <button type="button" id="stSmaller" aria-label="Smaller" title="Smaller">➖</button>
-      <button type="button" id="stBigger" aria-label="Bigger" title="Bigger">➕</button>
-      <button type="button" id="stRotL" aria-label="Turn left" title="Turn left">↺</button>
-      <button type="button" id="stRotR" aria-label="Turn right" title="Turn right">↻</button>
-      <button type="button" id="stFlip" aria-label="Flip" title="Flip">⇋</button>
-      <button type="button" id="stEdit" aria-label="Change the words" title="Change the words" hidden>✏️</button>
-      <button type="button" id="stFront" aria-label="Bring to front" title="Bring to front">⬆</button>
-      <button type="button" id="stDupe" aria-label="Duplicate" title="Duplicate">⧉</button>
-      <button type="button" id="stAttach" aria-label="Stick to face" title="Stick to face" aria-pressed="false">🔗</button>
-      <button type="button" id="stEveryone" aria-label="Put on every face" title="Put on every face">👥</button>
-      <button type="button" id="stDelete" class="danger" aria-label="Delete" title="Delete">🗑</button>
+      <button type="button" id="stAddMore" class="add"><b>＋</b><small>Add more</small></button>
+      <button type="button" id="stSmaller" aria-label="Smaller"><b>➖</b><small>Smaller</small></button>
+      <button type="button" id="stBigger" aria-label="Bigger"><b>➕</b><small>Bigger</small></button>
+      <button type="button" id="stRotL" aria-label="Turn left"><b>↺</b><small>Turn</small></button>
+      <button type="button" id="stRotR" aria-label="Turn right"><b>↻</b><small>Turn</small></button>
+      <button type="button" id="stFlip" aria-label="Flip"><b>⇋</b><small>Flip</small></button>
+      <button type="button" id="stEdit" aria-label="Change the words" hidden><b>✏️</b><small>Words</small></button>
+      <button type="button" id="stLayer" aria-label="In the photo or on top" aria-pressed="false"><b>🖼️</b><small>On top</small></button>
+      <button type="button" id="stFront" aria-label="Bring to front"><b>⬆</b><small>To front</small></button>
+      <button type="button" id="stDupe" aria-label="Duplicate"><b>⧉</b><small>Copy</small></button>
+      <button type="button" id="stAttach" aria-label="Stick to the nearest face" aria-pressed="false"><b>🔗</b><small>Stick to face</small></button>
+      <button type="button" id="stEveryone" aria-label="Copy onto every face"><b>👥</b><small>Copy to all faces</small></button>
+      <button type="button" id="stDelete" class="danger" aria-label="Delete"><b>🗑</b><small>Delete</small></button>
     </div>
     <div class="st-style">
       <div class="st-row"><span class="lbl">Outline</span><div class="swatches" id="stBorders"></div></div>
@@ -508,7 +531,7 @@
       </div>
     </div>
   </div>
-  <div class="st-tray">
+  <div class="st-tray" id="stTray">
     <div class="chips st-tabs" id="stTabs"></div>
     <div class="st-cats" id="stCats" hidden>
       <input type="search" id="stSearch" placeholder="Search emoji" autocomplete="off" enterkeyhint="search">
@@ -516,6 +539,7 @@
       <div class="chips tones" id="stTones"></div>
     </div>
     <div class="st-items" id="stItems"></div>
+  </div>
   </div>
 </div>
 

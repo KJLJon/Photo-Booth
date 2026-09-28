@@ -186,6 +186,8 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .app-mode button { border: 0; background: none; color: #fff; font-weight: 800; font-size: .95rem; padding: 8px 18px; border-radius: 999px; }
 .app-mode button[aria-selected="true"] { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 body.mode-video .only-photo, body.mode-photo .only-video { display: none !important; }
+body:not(.mode-booth) .only-booth, body:not(.mode-collage) .only-collage { display: none !important; }
+.app-mode button { padding: 8px 12px; }
 .sticky-save .vidbtn { flex: 1; }
 .app-foot { text-align: center; font-size: .8rem; color: var(--muted); padding: 18px 16px 90px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
@@ -475,3 +477,18 @@ body.mode-video .only-photo, body.mode-photo .only-video { display: none !import
 .zoomrow { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; }
 .zoomrow input { flex: 1; accent-color: #ff5fa2; height: 28px; }
 .ed-controls .row button:not(.primary) { background: rgba(255,255,255,.14); color: #fff; }
+
+.paint-badge { margin: 0 0 8px; padding: 6px 10px; border-radius: 10px; background: #fff3e0; color: #7a4a00; font-size: .85rem; font-weight: 700; text-align: center; }
+.paint-badge .linkbtn { font-size: .85rem; }
+
+/* the bottom of the sticker studio shows either the tray (to add) or the selected sticker's tools, at a steady height,
+   so the picture above never jumps in size */
+.st-bottom { flex: none; height: min(290px, 44vh); display: flex; flex-direction: column; background: #1f1330; }
+.st-bottom > .st-panel, .st-bottom > .st-tray { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.st-bottom > .st-tray { display: flex; flex-direction: column; }
+.st-bottom > .st-tray .st-items { flex: 1 1 auto; min-height: 0; }
+.st-bottom > .st-tray .st-items.grid { height: auto; }
+.st-tools button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 9px; min-width: 54px; }
+.st-tools button b { font-weight: 400; font-size: 1.05rem; line-height: 1.1; }
+.st-tools button small { font-size: .62rem; font-weight: 700; opacity: .85; white-space: nowrap; }
+.st-tools button.add { background: #fff; color: #2b1740; }
