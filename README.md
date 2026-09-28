@@ -4,6 +4,9 @@ A birthday photo booth that runs in the browser and installs as an app (PWA). Ta
 pick a background, message, filters and props, then save a photo strip, or record a boomerang,
 strobe, slow-mo or 360° clip and save it as a video or GIF. Everything happens on your device.
 
+**Camera:** pick face props with 😎 and see them on everyone's face live. Props and face paint
+come along onto the photos and videos you take.
+
 **Face props:** sunglasses, hats, mustaches, ears and other props snap onto faces and stay attached:
 - **Photo strips:** a prop sticks to the person in that photo. Retake or replace the photo and it
   jumps onto the new face.
@@ -14,13 +17,35 @@ strobe, slow-mo or 360° clip and save it as a video or GIF. Everything happens 
 **Stickers & text** (on photo strips and videos):
 - Built-in props, 30 SVG stickers (googly eyes, dog/cat/pig noses, hats, food, party) and every
   emoji up to Emoji 15, with categories and search.
-- Your own text, with any colour and a choice of fonts. Change the words with ✏️ or by double-clicking.
+- Your own text: several lines, curved up or down, any colour, a choice of fonts. Change the words
+  with ✏️ or by double-clicking.
+- In videos, stickers can wiggle, pulse, bounce, spin, float or flash.
 - Stickers get a die-cut outline (white by default, any colour, or none).
 - Drag to move. Pinch, or drag the round corner handle, to resize and turn. With a mouse,
   scroll to resize and shift+scroll to turn.
+- Undo and redo (Ctrl/Cmd+Z). Delete removes a sticker, arrow keys nudge it.
 
-**Saving without the booth design:** the save screen has a **🎉 Booth design / 📷 Just the photos**
-switch. Just the photos saves each photo on its own (pick one, or share them all) with its filter,
+**Looks:** filters plus brightness, contrast and colour sliders. **Face paint** (tiger, kitty,
+clown, glitter, sugar skull, butterfly, hearts) follows each face's shape. **Background swap** cuts
+people out and puts them on a beach, in space, at a disco, on your own picture, or on a blur.
+
+**Videos:** add background music (Happy Birthday, party, chill, drumroll). It's synthesized
+in the browser, so there are no audio files and it works offline.
+
+**Party mode 🎉:** hand a phone or tablet to your guests. It goes full screen with one big button,
+counts down the shots, then shows the strip to share or print with a QR code to the app. Hold ✕
+to leave. Every strip is kept in the party gallery on the device.
+
+**Designs:** save favourite designs (everything but the photos) and re-apply them, or send one
+to a friend as a link.
+
+**Printing:** 4×6 prints at 300 dpi (strips are doubled with a cut line) and a Print button.
+
+**Your work is kept:** photos stay on the device, so a reload, crash or update doesn't lose them
+(**Start over** clears them).
+
+**Saving without the booth design:** the save screen has **🎉 Design / 📷 Photos / 🖨️ 4×6 print**
+options. Just the photos saves each photo on its own (pick one, or share them all) with its filter,
 stickers and text, but no background, frame or message. Videos have the same switch
 (**🎥 Just the video**), which keeps the whole camera frame. A photo you zoomed or moved keeps that
 framing; otherwise the whole photo is saved.
@@ -66,13 +91,17 @@ app/                  ← everything that gets published
   js/props.js         ← clip-art props (drawn in code) and where each sits on a face
   js/filters.js       ← photo filters
   js/encoders.js      ← GIF / animated PNG encoders
-  js/face.js          ← face finder (MediaPipe BlazeFace, loaded only when needed)
+  js/face.js          ← MediaPipe: face finder, background cutter, detailed face shape (loaded when needed)
+  js/facepaint.js     ← face paint designs
+  js/music.js         ← synthesized video music
+  js/lib/qrcode.js    ← QR codes (qrcode-generator, MIT)
   js/emoji-data.js    ← emoji list (generated)
   stickers/           ← SVG sticker pack + stickers.js catalog
   icons/              ← app icons
   vendor/             ← face-tracking runtime, downloaded at build time (not committed)
 scripts/fetch-vendor.sh
 .github/workflows/pages.yml
+ROADMAP.md            ← ideas that need a backend (e.g. a shared party gallery on Cloudflare)
 ```
 
 ## Running locally
@@ -85,8 +114,10 @@ npx http-server app -c-1       # or: python3 -m http.server -d app
 The camera needs `https://` or `http://localhost`. When running locally the service worker cache
 isn't versioned, so turn on DevTools → Application → *Update on reload* while you edit.
 
-The face-tracking runtime (~11 MB of WebAssembly, plus a 230 KB model) is pinned to a version and
+The face-tracking runtime (~11 MB of WebAssembly, plus models: face finder 230 KB,
+background cutter 250 KB, face shape 3.7 MB) is pinned to a version and
 checked against a SHA-256 hash in `scripts/fetch-vendor.sh`. It downloads quietly in the background
 a couple of seconds after the app opens (unless the phone is in data-saver mode), then stays cached
 for offline use. Nothing waits for it: stickers work straight away, the sticker studio shows a
-progress bar, and face props start snapping on once it's ready.
+progress bar, and face props start snapping on once it's ready. The background cutter and the
+face-shape model are only downloaded when someone turns on background swap or face paint.
