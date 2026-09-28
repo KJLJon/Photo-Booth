@@ -243,6 +243,7 @@
       <p class="hint" style="text-align:left" id="collageSizeHint"></p>
       <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
       <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
+      <div class="btnrow"><button type="button" id="cutOpen">✂️ Draw your own lines</button></div>
     </div>
     <h3>Photo style</h3>
     <div class="chips" id="styles"></div>
@@ -519,6 +520,25 @@
   </div>
 </div>
 
+<div id="cutEd" hidden>
+  <div class="ed-top">
+    <div class="ed-left">
+      <button id="cutUndo" type="button" aria-label="Undo" title="Undo">↶</button>
+      <button id="cutClear" type="button" aria-label="Start over" title="Start over">🗑</button>
+    </div>
+    <div style="text-align:center">
+      <div class="title">Cut your collage</div>
+      <div class="sub" id="cutSub">Drag across to cut · up to 9 pieces</div>
+    </div>
+    <button id="cutDone" type="button" class="primary">✓ Done</button>
+  </div>
+  <canvas id="cutCanvas"></canvas>
+  <div class="cut-bar">
+    <label class="check" style="color:#fff"><input type="checkbox" id="cutSnap" checked> Snap to straight &amp; 15° angles</label>
+    <button type="button" id="cutFrom">Start from the current layout</button>
+  </div>
+</div>
+
 <div id="textSheet" class="overlay" hidden>
   <div class="sheet">
     <h2 id="txtTitle">Add your text</h2>
@@ -577,6 +597,7 @@
 <script src="js/filters.js"></script>
 <script src="js/props.js"></script>
 <script src="js/holidays.js"></script>
+<script src="js/collage.js"></script>
 <script src="stickers/stickers.js"></script>
 <script src="js/emoji-data.js"></script>
 <script src="js/encoders.js"></script>

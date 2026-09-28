@@ -365,6 +365,16 @@ body.mode-video .only-photo, body.mode-photo .only-video { display: none !import
 @media print { @page { margin: 0; } body { padding: 0 !important; background: #fff !important; } body > *:not(#printArea) { display: none !important; } #printArea { display: block !important; } #printArea img { width: 100%; display: block; } }
 #printArea { display: none; }
 
+/* collage cut editor */
+#cutEd { position: fixed; inset: 0; z-index: 44; background: #140a1f; color: #fff; display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+#cutEd .ed-top button { background: rgba(255,255,255,.14); color: #fff; }
+#cutEd .ed-top button.primary { background: linear-gradient(120deg, var(--accent2), var(--accent)); }
+#cutEd .ed-left { display: flex; gap: 6px; }
+#cutCanvas { flex: 1 1 auto; width: 100%; min-height: 0; touch-action: none; }
+.cut-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; padding: 10px; }
+.cut-bar button { background: rgba(255,255,255,.16); color: #fff; }
+
 /* sticker studio */
 #stickerEd {
   position: fixed; inset: 0; z-index: 35; background: #140a1f; color: #fff; display: flex; flex-direction: column;

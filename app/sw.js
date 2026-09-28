@@ -20,6 +20,7 @@ const ASSETS = [
   './js/facepaint.js',
   './js/holidays.js',
   './js/datestamp.js',
+  './js/collage.js',
   './js/emoji-data.js',
   './js/app.js',
   './stickers/stickers.js'

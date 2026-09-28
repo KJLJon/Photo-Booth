@@ -712,14 +712,14 @@
     bgDim: 0.2, preset: 0,
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
-    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: ''
+    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: '', cuts: []
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -768,8 +768,8 @@
     { id: 'c-center', label: '🎯 Center' },
     { id: 'c-film', label: '🎞️ Film' },
     { id: 'c-scatter', label: '📷 Scattered' }
-  ];
-  const isCollage = (id) => /^c-/.test(id || state.layout);
+  ].concat((window.PBCollage ? PBCollage.TEMPLATES : []).map(t => ({ id: t.id, label: t.label })), [{ id: 'c-custom', label: '✂️ Your own cuts' }]);
+  const isCollage = (id) => /^[cp]-/.test(id || state.layout);
 
   const LAYOUTS = [
     { id: 'strip', label: '📏 Strip' },
@@ -888,6 +888,19 @@
     const W = Math.round(Z.w * k), H = Math.round(Z.h * k), m = Math.min(W, H);
     const gap = m * (state.collageGap == null ? .025 : state.collageGap), cap = state.caption ? Math.round(H * (H > W ? .14 : .2)) : 0;
     const box = { x: gap, y: gap, w: W - 2 * gap, h: H - 2 * gap - cap };
+    // angled pieces (js/collage.js): polygons cut from the box, each shrunk to leave the gaps
+    const pcs = window.PBCollage && PBCollage.pieces(kind, n, rowsFor, state.cuts);
+    if (pcs && pcs.length) {
+      const toPx = ([x, y]) => [box.x + x * box.w, box.y + y * box.h];
+      const onEdge = (a, b) => ['x', 'y'].some((k, d) => [box[k], box[k] + (d ? box.h : box.w)].some(v => Math.abs(a[d] - v) < .5 && Math.abs(b[d] - v) < .5));
+      const rects = pcs.slice(0, Math.max(n, 1)).map(poly => {
+        const pts = PBCollage.shrink(poly.map(toPx), gap / 2, 0, onEdge);
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        pts.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); });
+        return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, poly: pts };
+      });
+      return { W, H, rects, box, border: m * .012, cap: cap ? { x: 0, y: H - cap - gap / 2, w: W, h: cap } : null, collage: true };
+    }
     const scatter = kind === 'c-scatter';
     // cells touching the edge keep the full outer margin; shared edges get half a gap each side
     const rects = cellsFor(kind, n, box.w / box.h).map(c => {
@@ -1156,8 +1169,11 @@
 
   function drawPhoto(ctx, p, rect, jit, border, idx, rng) {
     const style = state.style;
-    const card = usesCard();
+    const card = usesCard() && !rect.poly;
     const shape = state.shape;
+    // angled collage pieces: the photo is clipped to the polygon (in coordinates around the photo's centre)
+    const polyL = rect.poly ? rect.poly.map(([x, y]) => [x - rect.x - rect.w / 2, y - rect.y - rect.h / 2]) : null;
+    const polyPath = () => { polyL.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
     let fill = frameFill();
     let b = fill ? border * state.frameSize : 0;
     if (card && style === 'polaroid') { fill = fill || '#ffffff'; b = Math.max(b, border); }
@@ -1165,7 +1181,7 @@
     const ir = innerRect(rect, border);
     const px = -ir.w / 2, py = -rect.h / 2;              // photo box, top-left
     const photoR = shape === 'rounded' ? Math.min(ir.w, ir.h) * 0.08 : 0;
-    const curvy = shape !== 'rect' && shape !== 'rounded';     // frame follows the outline instead of a box
+    const curvy = !!polyL || (shape !== 'rect' && shape !== 'rounded');     // frame follows the outline instead of a box
 
     ctx.save();
     ctx.translate(rect.x + rect.w / 2 + jit.dx, rect.y + rect.h / 2 + jit.dy);
@@ -1183,6 +1199,8 @@
       const side = style === 'film' ? b + border * 2.2 : b;
       const cardR = style === 'film' ? border * 0.4 : border * 0.5;
       shapePath(ctx, 'rect', -rect.w / 2 - side, -rect.h / 2 - b, rect.w + 2 * side, rect.h + 2 * b, cardR);
+    } else if (polyL) {
+      polyPath();
     } else if (curvy) {
       shapePath(ctx, shape, px, py, ir.w, ir.h, 0);
     } else {
@@ -1211,7 +1229,7 @@
     // the photo, clipped to its shape
     ctx.save();
     ctx.beginPath();
-    shapePath(ctx, card ? 'rect' : shape, px, py, ir.w, ir.h, photoR);
+    if (polyL) polyPath(); else shapePath(ctx, card ? 'rect' : shape, px, py, ir.w, ir.h, photoR);
     ctx.clip();
     if (p) {
       const c = cropFor(p, ir.w / ir.h);
@@ -1653,7 +1671,8 @@
     const col = isCollage();
     chipGroup($('boothMode'), [{ id: false, label: '🎞️ Photo booth' }, { id: true, label: '▦ Collage' }], m => col === m.id,
       m => selectLayout(m.id ? (state.lastCollage || 'c-grid') : (state.lastBooth || 'strip')));
-    const opts = col ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ label: String(n), n })) : [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }];
+    const opts = state.layout === 'c-custom' ? [{ label: `${state.count} (from your cuts)`, n: state.count }]
+      : col ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ label: String(n), n })) : [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }];
     chipGroup($('counts'), opts, it => state.count === it.n, it => {
       state.count = it.n; buildCounts(); buildSlots(); schedule();
     });
@@ -1683,7 +1702,10 @@
   }
   function buildLayouts() {
     chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => selectLayout(it.id));
-    chipGroup($('collages'), COLLAGES, it => state.layout === it.id, it => selectLayout(it.id));
+    chipGroup($('collages'), COLLAGES.filter(c => c.id !== 'p-diamond' || state.count === 5 || state.layout === c.id), it => state.layout === it.id, it => {
+      if (it.id === 'c-custom') { openCutEditor(); return; }
+      selectLayout(it.id);
+    });
     $('collageOpts').hidden = !isCollage();
     chipGroup($('collageSizes'), SIZES, z => state.collageSize === z.id, z => { state.collageSize = z.id; buildLayouts(); schedule(); });
     [...$('collageSizes').children].forEach((b, i) => { b.title = SIZES[i].hint; });
@@ -1692,6 +1714,98 @@
     chipGroup($('styles'), STYLES, it => state.style === it.id, it => { state.style = it.id; buildLayouts(); schedule(); });
     chipGroup($('shapes'), SHAPES, it => state.shape === it.id, it => { state.shape = it.id; buildLayouts(); schedule(); });
   }
+  // ---- ✂️ cut editor: drag lines across the collage; each cut splits the pieces it crosses ----
+  const cutEd = { cuts: [], drag: null, view: null };
+  const cutCv = $('cutCanvas');
+  function openCutEditor() {
+    if (!isCollage()) selectLayout('c-grid');
+    cutEd.cuts = state.layout === 'c-custom' ? state.cuts.slice() : [];
+    if (!cutEd.cuts.length) fromCurrent();
+    applyCuts();                                               // the collage becomes "your own cuts" straight away
+    $('cutEd').hidden = false; syncScroll();
+    requestAnimationFrame(drawCutEd);
+  }
+  function fromCurrent() {
+    const cuts = PBCollage.cutsOf(state.layout, state.count, rowsFor);
+    if (cuts) { cutEd.cuts = cuts.map(c => c.slice()); return; }
+    // grid-style layouts: rebuild them from straight cuts (rows, then columns in each row)
+    const r = rowsFor(Math.max(1, state.count), false), R = r.length, out = [];
+    for (let i = 1; i < R; i++) out.push([-.1, i / R, 1.1, i / R]);
+    r.forEach((c, i) => { for (let j = 1; j < c; j++) out.push([j / c, i / R + .02, j / c, (i + 1) / R - .02]); });
+    cutEd.cuts = out;
+  }
+  function applyCuts() {
+    state.cuts = cutEd.cuts.map(c => c.map(v => Math.round(v * 1e4) / 1e4));
+    const n = PBCollage.fromCuts(state.cuts).length;
+    if (state.layout !== 'c-custom') selectLayout('c-custom');
+    state.count = clamp(n, 1, MAX_PHOTOS); buildCounts(); buildSlots(); buildLayouts(); schedule();
+  }
+  function cutView() {
+    const dpr = window.devicePixelRatio || 1, cw = cutCv.clientWidth, ch = cutCv.clientHeight;
+    if (cutCv.width !== Math.round(cw * dpr) || cutCv.height !== Math.round(ch * dpr)) { cutCv.width = Math.round(cw * dpr); cutCv.height = Math.round(ch * dpr); }
+    const L = computeLayout(state.layout, state.count), k = Math.min((cw - 24) / L.W, (ch - 24) / L.H);
+    return { dpr, cw, ch, L, k, x: (cw - L.W * k) / 2, y: (ch - L.H * k) / 2 };
+  }
+  function drawCutEd() {
+    if ($('cutEd').hidden) return;
+    const V = cutEd.view = cutView(), ctx = cutCv.getContext('2d');
+    ctx.setTransform(V.dpr, 0, 0, V.dpr, 0, 0); ctx.clearRect(0, 0, V.cw, V.ch);
+    const base = document.createElement('canvas'); composeInto(base, false);
+    ctx.drawImage(base, V.x, V.y, V.L.W * V.k, V.L.H * V.k);
+    // the pieces these cuts make, outlined and numbered
+    const box = V.L.box || { x: 0, y: 0, w: V.L.W, h: V.L.H };
+    const toV = ([x, y]) => [V.x + (box.x + x * box.w) * V.k, V.y + (box.y + y * box.h) * V.k];
+    const pcs = PBCollage.fromCuts(cutEd.cuts);
+    ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.strokeStyle = '#ff5fa2';
+    pcs.forEach((poly, i) => {
+      ctx.beginPath(); poly.map(toV).forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke();
+      const [cx, cy] = toV(PBCollage.centroid(poly));
+      ctx.setLineDash([]); ctx.fillStyle = 'rgba(20,10,31,.75)'; ctx.beginPath(); ctx.arc(cx, cy, 14, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(i + 1, cx, cy);
+      ctx.setLineDash([6, 5]);
+    });
+    if (cutEd.drag) {
+      const [a, b] = cutEd.drag.map(toV);
+      ctx.setLineDash([]); ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f';
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    $('cutSub').textContent = `${pcs.length} piece${pcs.length === 1 ? '' : 's'} · drag across to cut · up to 9`;
+    $('cutUndo').disabled = !cutEd.cuts.length;
+  }
+  function cutPoint(e) {
+    const V = cutEd.view, b = cutCv.getBoundingClientRect(), box = V.L.box || { x: 0, y: 0, w: V.L.W, h: V.L.H };
+    return [((e.clientX - b.left - V.x) / V.k - box.x) / box.w, ((e.clientY - b.top - V.y) / V.k - box.y) / box.h];
+  }
+  function snapped(a, b) {
+    if (!$('cutSnap').checked) return b;
+    const box = cutEd.view.L.box || { w: 1, h: 1 }, dx = (b[0] - a[0]) * box.w, dy = (b[1] - a[1]) * box.h, L = Math.hypot(dx, dy);
+    const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12);
+    return [a[0] + Math.cos(ang) * L / box.w, a[1] + Math.sin(ang) * L / box.h];
+  }
+  cutCv.addEventListener('pointerdown', (e) => { cutCv.setPointerCapture(e.pointerId); const p = cutPoint(e); cutEd.drag = [p, p]; drawCutEd(); });
+  cutCv.addEventListener('pointermove', (e) => { if (!cutEd.drag) return; cutEd.drag[1] = snapped(cutEd.drag[0], cutPoint(e)); drawCutEd(); });
+  cutCv.addEventListener('pointerup', () => {
+    const d = cutEd.drag; cutEd.drag = null;
+    if (!d) return;
+    const [a, b] = d, L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (L < .04) { drawCutEd(); return; }
+    // stretch the drawn line a little past its ends so a cut from edge to edge goes all the way
+    const ex = (b[0] - a[0]) / L * .03, ey = (b[1] - a[1]) / L * .03;
+    const next = cutEd.cuts.concat([[a[0] - ex, a[1] - ey, b[0] + ex, b[1] + ey]]);
+    if (PBCollage.fromCuts(next).length > MAX_PHOTOS) { toast('That would make more than 9 pieces'); drawCutEd(); return; }
+    cutEd.cuts = next; applyCuts(); drawCutEd();
+  });
+  $('cutUndo').addEventListener('click', () => { cutEd.cuts.pop(); applyCuts(); drawCutEd(); });
+  $('cutClear').addEventListener('click', () => { cutEd.cuts = []; applyCuts(); drawCutEd(); });
+  $('cutFrom').addEventListener('click', () => {
+    const was = state.layout; if (was === 'c-custom') { toast('Pick a layout first, then start from it'); return; }
+    fromCurrent(); applyCuts(); drawCutEd();
+  });
+  $('cutDone').addEventListener('click', () => { $('cutEd').hidden = true; syncScroll(); applyCuts(); });
+  $('cutOpen').addEventListener('click', openCutEditor);
+  window.addEventListener('resize', () => requestAnimationFrame(drawCutEd));
+
   $('collageGap').addEventListener('input', (e) => { state.collageGap = +e.target.value; schedule(); });
   $('collageCaption').addEventListener('change', (e) => { state.caption = e.target.checked; schedule(); });
   function buildFonts() {
@@ -1898,7 +2012,7 @@
   }
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
   const isAndroid = /Android/i.test(navigator.userAgent);
-  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery'];
+  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery', 'cutEd'];
   function syncScroll() { document.body.style.overflow = OVERLAYS.some(id => !$(id).hidden) ? 'hidden' : ''; }
   function stamp() {
     const d = new Date(), pad = (n) => String(n).padStart(2, '0');
