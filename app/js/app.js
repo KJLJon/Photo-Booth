@@ -3132,10 +3132,10 @@
     return Object.keys(THEME_WORDS).find(k => THEME_WORDS[k].test(words)) || 'all';
   }
   // chips for the themes that have something in `items` ({ kind, id }); returns the theme in use
-  function themeChips(el, items, rebuild) {
+  function themeChips(el, items, rebuild, searching) {
     const has = FACE_THEMES.filter(t => t.id === 'all' || items.some(c => inTheme(themeOf(c.kind, c.id), t.id)));
-    let cur = curFaceTheme(); if (!has.some(t => t.id === cur)) cur = 'all';
-    chipGroup(el, has, t => t.id === cur, t => { faceTheme.cur = t.id; rebuild(); });
+    let cur = searching ? 'all' : curFaceTheme(); if (!has.some(t => t.id === cur)) cur = 'all';   // a search looks through everything
+    chipGroup(el, has, t => t.id === cur, t => { faceTheme.cur = t.id; if (searching) { emojiQuery = ''; $('stSearch').value = ''; } rebuild(); });
     const on = el.querySelector('[aria-pressed="true"]');
     if (on) el.scrollLeft = Math.max(0, on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2);
     return cur;
@@ -3156,10 +3156,10 @@
       return b;
     };
     if (stEd.tab === 'props') {
-      const th = themeChips($('stCatChips'), PBProps.LIST.map(p => ({ kind: 'prop', id: p.id })), buildStickerTray);
+      const th = themeChips($('stCatChips'), PBProps.LIST.map(p => ({ kind: 'prop', id: p.id })), buildStickerTray, !!emojiQuery);
       PBProps.LIST.filter(pr => inTheme(pr.theme, th)).forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name));
     } else if (stEd.tab === 'fun') {
-      const L = self.PBStickers || [], th = themeChips($('stCatChips'), L.map(d => ({ kind: 'svg', id: d.id })), buildStickerTray);
+      const L = self.PBStickers || [], th = themeChips($('stCatChips'), L.map(d => ({ kind: 'svg', id: d.id })), buildStickerTray, !!emojiQuery);
       L.filter(d => inTheme(d.theme || '', th)).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
     } else if (stEd.tab === 'words') {
       add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
@@ -3183,7 +3183,7 @@
   }
   $('stSearch').addEventListener('input', (e) => {
     emojiQuery = e.target.value.trim();
-    if (stEd.tab === 'emoji') { buildStickerTray(); return; }
+    if (stEd.tab === 'emoji' || stEd.tab === 'props' || stEd.tab === 'fun') { buildStickerTray(); return; }
     filterTray();
   });
   function filterTray() {
