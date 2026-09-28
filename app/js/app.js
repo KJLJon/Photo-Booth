@@ -1076,6 +1076,7 @@
     if (typeof updateSummaries === 'function') updateSummaries();
     saveSettings();
     keepPhotosSoon();
+    videoPreviewSoon();
   }
 
   // ================= keep photos across reloads =================
@@ -2645,7 +2646,7 @@
     { id: 'slowmo', label: '🐢 Slow-mo', kind: 'video', secs: 3 },
     { id: 'spin', label: '🌀 360 spin', kind: 'video', secs: 6 }
   ];
-  const cam = { stream: null, facing: 'user', mode: 'booth', timer: 3, shots: [], slot: -1, busy: false, cancel: false,
+  const cam = { lastOf: { photo: 'booth', video: 'boomerang' }, stream: null, facing: 'user', mode: 'booth', timer: 3, shots: [], slot: -1, busy: false, cancel: false,
     stopEarly: false, recording: false, glamBW: false, audio: null, last: null };
   const camVideo = $('camVideo');
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -2654,7 +2655,12 @@
   const camFilter = () => cam.mode === 'glam' ? (cam.glamBW ? 'glambw' : 'glam') : cam.mode === 'comic' ? 'comic' : state.filter;
 
   function buildCamUI() {
-    const modes = CAM_MODES.filter(m => cam.slot < 0 || m.kind === 'photo');
+    // Photo / Video switch: shows that kind's modes and remembers the last one picked of each
+    const kind = camMode().kind;
+    cam.lastOf[kind] = cam.mode;
+    $('camKind').hidden = cam.slot >= 0;
+    [...$('camKind').children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.kind === kind)));
+    const modes = CAM_MODES.filter(m => m.kind === kind);
     const mEl = $('camModes'); mEl.innerHTML = '';
     modes.forEach(m => {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = m.label;
@@ -2923,6 +2929,13 @@
   });
   $('camExtra').addEventListener('click', () => { cam.glamBW = !cam.glamBW; buildCamUI(); applyPreview(); });
   $('openCam').addEventListener('click', () => openCamera());
+  $('openVid').addEventListener('click', () => openCamera({ mode: cam.lastOf.video || 'boomerang' }));
+  [...$('camKind').children].forEach(b => b.addEventListener('click', () => {
+    if (cam.busy) return;
+    const kind = b.dataset.kind; if (camMode().kind === kind) return;
+    cam.mode = cam.lastOf[kind] || CAM_MODES.find(m => m.kind === kind).id;
+    cam.shots = []; buildCamUI(); applyPreview();
+  }));
 
   // ================= party mode =================
   // A kiosk for guests: full screen, one big button, 4-shot countdown (with the host's design, stickers
@@ -3204,6 +3217,7 @@
     }
     setBusy(false);
     cam.last = { mode: m, clip, mirror: cam.facing === 'user' };
+    keepClip();
     // props worn in the camera ride along on the video, one set per face that was in view
     state.vstickers = state.vstickers.filter(st => !(st.face && st.face.cam));
     for (let k = 0; k < Math.max(1, live.count); k++) state.camProps.forEach(cp => state.vstickers.push(camSticker(cp, 0, k)));
@@ -3240,15 +3254,17 @@
     cam.recording = true; $('camRec').hidden = false;
     const t0 = performance.now();
     let el = 0;
+    let still = null;
     while ((el = (performance.now() - t0) / 1000) < secs) {
       if (cam.cancel || (cam.stopEarly && el > 1)) break;
+      if (!still && el > Math.min(.5, secs / 2)) still = grabFrame(720);   // a frame for the design preview
       $('camRec').textContent = `● REC ${el.toFixed(1)}s`;
       await sleep(100);
     }
     rec.stop(); await stopped;
     cam.recording = false; $('camRec').hidden = true;
     if (cam.cancel) throw new Error('cancel');
-    return { blob: new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' }), secs: Math.min(secs, el) };
+    return { blob: new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' }), secs: Math.min(secs, el), still: still || grabFrame(720) };
   }
 
   // Renders frames into a 720×1280 framed picture: background, caption, photo frame, stickers.
@@ -3473,14 +3489,73 @@
     try {
       const res = await makeVideo(L.mode, L.clip, L.mirror);
       showVideoResult(res, L.mode);
+      drawVideoPreview();
     } catch (e) {
       toast('Could not make the video: ' + (e && e.message || e));
     }
   }
+  // ---- "Your video" on the main page: live design preview + remake, and the clip kept on the device ----
+  const designSig = () => JSON.stringify([designOf(), state.vplain, state.music, state.adj, state.bgSwap, state.facePaint, swapImageId]);
+  let vidPrevTimer = 0;
+  function videoPreviewSoon() { if (!cam.last) return; clearTimeout(vidPrevTimer); vidPrevTimer = setTimeout(drawVideoPreview, 250); }
+  function clipStill(clip) { return clip.frames ? clip.frames[Math.floor(clip.frames.length / 2)] : clip.still; }
+  function drawVideoPreview() {
+    const L = cam.last; if (!L) return;
+    $('videoSection').hidden = false;
+    const src = clipStill(L.clip);
+    if (!src) return;
+    const comp = videoComposer(state.vplain); comp.collect = false;
+    comp.draw(src, false, { t: 0 });
+    const out = $('vidPreview'), k = Math.min(1, 540 / Math.max(comp.out.width, comp.out.height));
+    out.width = Math.round(comp.out.width * k); out.height = Math.round(comp.out.height * k);
+    out.getContext('2d').drawImage(comp.out, 0, 0, out.width, out.height);
+    const dirty = !!vid.url && vid.sig !== designSig();
+    $('vidPrevHint').classList.toggle('dirty', dirty);
+    $('vidPrevHint').innerHTML = dirty
+      ? '✨ You changed the design — tap <b>Remake video</b> to put it in the video.'
+      : 'Change the background, message, filters, face paint or stickers above and this preview follows along. Tap <b>Remake video</b> to rebuild it (takes a few seconds).';
+    $('vidOpen').disabled = !vid.url;
+  }
+  $('vidRemake').addEventListener('click', () => { try { audioCtx(); } catch (e) { /* no audio */ } buildVideo(); });
+  $('vidOpen').addEventListener('click', () => { if (!vid.url) return; $('videoSheet').hidden = false; syncScroll(); $('outVideo').play().catch(() => {}); });
+  $('vidStickers2').addEventListener('click', () => { $('videoSheet').hidden = true; $('vidStickers').click(); });
+  $('vidNew').addEventListener('click', () => openCamera({ mode: cam.lastOf.video || 'boomerang' }));
+  $('vidDesign').addEventListener('click', () => {
+    closeVideoSheet(); drawVideoPreview();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast('🎨 Change the design, then tap 🎬 Remake video');
+  });
+  // keep the last clip so the video can be remade after closing the app
+  async function keepClip() {
+    const L = cam.last; if (!L || !window.indexedDB) return;
+    try {
+      const jpg = (c) => new Promise(r => c.toBlob(r, 'image/jpeg', .9));
+      const rec = { mode: L.mode.id, mirror: L.mirror };
+      if (L.clip.frames) rec.frames = await Promise.all(L.clip.frames.map(jpg));
+      else { rec.blob = L.clip.blob; rec.secs = L.clip.secs; rec.still = L.clip.still ? await jpg(L.clip.still) : null; }
+      await photoTx('readwrite', s => s.put(rec, 'lastclip'));
+    } catch (e) { /* storage full: the clip just won't survive a reload */ }
+  }
+  async function restoreClip() {
+    try {
+      const rec = await photoTx('readonly', s => s.get('lastclip'));
+      if (!rec) return;
+      const toCanvas = async (b) => {
+        const bmp = await createImageBitmap(b), c = document.createElement('canvas');
+        c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0); return c;
+      };
+      const clip = rec.frames ? { frames: await Promise.all(rec.frames.map(toCanvas)) }
+        : { blob: rec.blob, secs: rec.secs, still: rec.still ? await toCanvas(rec.still) : null };
+      cam.last = { mode: CAM_MODES.find(m => m.id === rec.mode) || CAM_MODES[3], clip, mirror: rec.mirror };
+      drawVideoPreview();
+    } catch (e) { /* nothing kept */ }
+  }
+
   function showVideoResult(res, m) {
     if (vid.url) URL.revokeObjectURL(vid.url);
     const ext = /mp4/.test(res.blob.type) ? 'mp4' : 'webm';
     vid = { url: URL.createObjectURL(res.blob), gif: res.gif, gifDelay: res.gifDelay, name: `photobooth-${m.id}-${stamp()}` };
+    vid.sig = designSig();
     vid.file = new File([res.blob], `${vid.name}.${ext}`, { type: res.blob.type || 'video/' + ext });
     // with music, try to play it with sound (browsers may insist on muted until the next tap)
     const v = $('outVideo'); v.src = vid.url; v.muted = !state.music || state.music === 'none';
@@ -3576,6 +3651,7 @@
   syncUI();
   buildFilterTiles();
   render();
+  restoreClip();
   restorePhotos().then(n => {
     if (!n) return;
     buildSlots(); schedule();

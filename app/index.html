@@ -34,8 +34,9 @@
     <div class="chips" id="counts"></div>
     <div class="slots" id="slots"></div>
     <div class="row" style="flex-wrap:nowrap">
-      <button id="openCam" type="button" class="primary" style="flex:1.4 1 auto;padding:12px 10px">📸 Camera</button>
-      <label class="btn" style="flex:1.2 1 auto;padding:12px 10px">
+      <button id="openCam" type="button" class="primary" style="flex:1.2 1 auto;padding:12px 8px">📸 Photos</button>
+      <button id="openVid" type="button" class="primary vidbtn" style="flex:1.1 1 auto;padding:12px 8px">🎥 Video</button>
+      <label class="btn" style="flex:1 1 auto;padding:12px 8px">
         🖼️ <span id="multiLabel">Upload</span>
         <input type="file" id="multi" accept="image/*" multiple hidden>
       </label>
@@ -259,6 +260,21 @@
     <div class="btnrow"><button type="button" id="previewStickers">😎 Stickers &amp; props</button><button type="button" id="previewText">🔤 Add text</button></div>
   </section>
 
+  <section id="videoSection" hidden>
+    <h2>🎬 Your video</h2>
+    <div class="preview-wrap vid"><canvas id="vidPreview"></canvas></div>
+    <p class="hint" id="vidPrevHint">Change the background, message, filters, face paint or stickers above and this preview follows along.
+      Tap <b>Remake video</b> to rebuild it (takes a few seconds).</p>
+    <div class="btnrow">
+      <button type="button" class="primary" id="vidRemake">🎬 Remake video</button>
+      <button type="button" id="vidOpen">▶️ Open video</button>
+    </div>
+    <div class="btnrow">
+      <button type="button" id="vidStickers2">😎 Video stickers</button>
+      <button type="button" id="vidNew">🎥 Record new</button>
+    </div>
+  </section>
+
   <div class="sticky-save">
     <button id="jump" type="button" aria-label="Show preview">👀</button>
     <button class="primary" id="save" type="button" disabled>Add photos to save</button>
@@ -301,6 +317,10 @@
     <div id="camShots"></div>
     <div class="cam-strip props" id="camProps" hidden></div>
     <div class="cam-strip small" id="camFilters"></div>
+    <div class="cam-kind" id="camKind" role="tablist">
+      <button type="button" data-kind="photo" role="tab">📷 Photo</button>
+      <button type="button" data-kind="video" role="tab">🎥 Video</button>
+    </div>
     <div class="cam-strip" id="camModes"></div>
     <div class="cam-controls">
       <button class="cam-btn left" id="camTimer" type="button">⏱ 3s</button>
@@ -351,6 +371,9 @@
     </div>
     <div class="btnrow">
       <button type="button" id="vidStickers">😎 Stickers</button>
+      <button type="button" id="vidDesign">🎨 Change design</button>
+    </div>
+    <div class="btnrow">
       <button type="button" id="vidRetake">🎥 Record again</button>
     </div>
     <button type="button" class="cancel" id="vidClose">Close</button>
