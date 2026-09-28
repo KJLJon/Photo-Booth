@@ -4,13 +4,21 @@ A birthday photo booth that runs in the browser and installs as an app (PWA). Ta
 pick a background, message, filters and props, then save a photo strip, or record a boomerang,
 strobe, slow-mo or 360° clip and save it as a video or GIF. Everything happens on your device.
 
-**📷 Photos / 🎥 Video:** the switch at the top picks what you're making. Photos mode shows only
-photo things (the strip or collage, saving, printing); Video mode shows only video things (the
-kind of clip, music, video size and **Record** / **Make video**). The design (background, message,
-filters, stickers) is shared by both. The app remembers which one you used last.
+**🎞️ Photo booth / ▦ Collage / 🎥 Video:** the three modes at the top, each showing only its own
+settings:
+- **Photo booth:** 3 or 4 photos in a booth layout (strip, 2×2 grid, side by side, big + small,
+  scrapbook, postcard) with the background, message and icons. The photo area can be cut into angled
+  **Slices** (slanted, zigzag, tilted rows, fan…), or use a photo style (tilted, Polaroid, film…)
+  and shape. Party mode lives here.
+- **Collage:** 1–9 photos in straight or angled designs, sized for social media, with a border;
+  the message and icons are optional (the Message card has the switch).
+- **Video:** the clip, music and video size.
 
-The page runs in the order you'd work: your photos → layout → occasion → background → message →
-icons → frames → filters & looks → face paint, props & stickers → preview (then party mode). A live
+The design (occasion, background, message, frames, filters, faces & stickers) is shared by all three,
+and the app remembers which mode you used last.
+
+The page runs in the order you'd work: your photos → layout (or collage design) → occasion → background
+→ message → icons → frames → filters & looks → faces & stickers → preview (then party mode). A live
 thumbnail of your picture sits next to the save button, so you can see each change without scrolling;
 tap it to jump to the full preview.
 
@@ -18,12 +26,22 @@ tap it to jump to the full preview.
 strobe, slow-mo, 360). Zoom by pinching, scrolling or the 1×/2×/3× buttons. Phones that list their
 ultra-wide or telephoto lens also get 0.5× and 2×/3× lens buttons. Tap 😎 to pick face props and face
 paint and see them on everyone's face live: **🎨 Face paint** lists every paint, and the holiday chips
-show that holiday's hats, masks and paints. They come along onto the photos and videos you take.
+show that holiday's hats, masks and paints. **👥 Everyone / 🙂 One person** picks whether props go on
+every face or just the closest one. They come along onto the photos and videos you take.
 
 **Sticker studio tabs:** 🎭 Face props (everything that sits on a face, by holiday) · 🎨 Face paint
-(photos) · 🤪 Stickers · 🔤 Text · 😀 Emoji.
+(photos) · 🤪 Stickers · 🔤 Text · 😀 Emoji. Tap a sticker and the tray turns into its tools (the
+picture stays the same size): smaller/bigger, turn, flip, **🖼️ In the photo / ⬆ On top**, copy,
+**🔗 Stick to face** (the nearest face), **👥 Copy to all faces**, delete, outline colour. **＋ Add more**
+goes back to the tray.
 
-**Collages:** switch the photo section to **▦ Collage** to tile 1–9 photos with a white border (or
+**Sticker layers:** a sticker set to **In the photo** is cut off at its photo's edge and sits under the
+frame, tape and border, like it was in the picture. **On top** stickers go over everything.
+
+**Face paint** applies to every photo; the note above the preview says when it's on, with **Remove**.
+Tap a photo to give just that one its own paint (or none).
+
+**Collages:** switch to **▦ Collage** to tile 1–9 photos with a white border (or
 any background). Besides grid, big + small, mosaic, columns, center, film and scattered prints there
 are angled designs for every photo count: slanted, zigzag, tilted rows, zigzag rows, tilted grid,
 shards, fan, pinwheel and (for 5) a diamond. **✂️ Your own cuts** opens an editor where you drag lines
@@ -59,8 +77,10 @@ Videos can be made in the same sizes.
   masquerade mask · 🇺🇸 stars & stripes hat, flag glasses, star boppers · ☘️ leprechaun hat and beard,
   shamrock glasses · 🐣 bunny nose & teeth · 💘 heart boppers · 🏴‍☠️ pirate hat and a full pirate face
   (bandana, eye patch, moustache, goatee, earring).
-- In the sticker studio, 🔗 sticks or unsticks the selected sticker (emoji too), and 👥 copies it
-  onto every face. Drag a stuck prop onto another face to move it there.
+- In the sticker studio, 🔗 sticks or unsticks the selected sticker (emoji too) to the nearest face,
+  and 👥 copies it onto every face. Drag a stuck prop onto another face to move it there.
+- Stickers are kept per layout; a layout you haven't decorated yet starts with the face props from
+  the one you came from.
 
 **Stickers & text** (on photo strips and videos):
 - Built-in props, 30 SVG stickers (googly eyes, dog/cat/pig noses, hats, food, party) and every

@@ -65,27 +65,33 @@
     <div class="chips" id="layouts"></div>
     <h3>Slices <span style="font-weight:600">· cut the photo area at an angle</span></h3>
     <div class="chips" id="boothSlices"></div>
+    <p class="hint" style="text-align:left" id="styleNote" hidden></p>
+    <div id="styleRows">
     <h3>Photo style</h3>
     <div class="chips" id="styles"></div>
-    <p class="hint" style="text-align:left" id="styleNote" hidden></p>
     <h3>Photo shape</h3>
     <div class="chips" id="shapes"></div>
+    </div>
     </div>
   </details>
 
   <details class="card only-collage" data-key="collage">
     <summary><span>▦ Collage design</span><span class="val" id="sum-collage"></span></summary>
     <div class="body">
-    <h3 style="margin-top:0">Design</h3>
+    <h3 style="margin-top:0">Straight</h3>
     <div class="chips" id="collages"></div>
+    <h3>Angled</h3>
+    <div class="chips" id="collagesAngled"></div>
     <div class="btnrow"><button type="button" id="cutOpen">✂️ Draw your own lines</button></div>
     <h3>Size</h3>
     <div class="chips" id="collageSizes"></div>
     <p class="hint" style="text-align:left" id="collageSizeHint"></p>
     <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
     <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
-    <h3>Photo shape <span style="font-weight:600">· for straight designs</span></h3>
+    <div id="collageShapeRow">
+    <h3>Photo shape</h3>
     <div class="chips" id="collageShapes"></div>
+    </div>
     </div>
   </details>
 
@@ -299,11 +305,11 @@
     <div class="btnrow"><button type="button" id="previewStickers">😎 Stickers &amp; props</button><button type="button" id="previewText">🔤 Add text</button></div>
   </section>
 
-  <details class="card only-photo" data-key="party">
+  <details class="card only-booth" data-key="party">
     <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
     <div class="body">
       <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
-        4-shot countdown, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
+        a countdown for each shot, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
       <div class="btnrow">
         <button type="button" class="primary" id="partyStart">🎉 Start party mode</button>
         <button type="button" id="galleryOpen">📚 Gallery</button>

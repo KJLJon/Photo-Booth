@@ -713,14 +713,14 @@
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
     saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: '', cuts: [],
-    vidFrame: { zoom: 1, cx: null, cy: null }, vidCrop: { x: .5, y: .5, z: 1 }, boothSlice: ''
+    vidFrame: { zoom: 1, cx: null, cy: null }, vidCrop: { x: .5, y: .5, z: 1 }, boothSlice: '', camPropsWho: 'all'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts', 'vidFrame', 'vidCrop', 'boothSlice'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts', 'vidFrame', 'vidCrop', 'boothSlice', 'camPropsWho'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -1624,6 +1624,7 @@
     DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
     if (!THEMES[state.theme] || state.theme === 'photo') state.theme = 'confetti';
     syncUI(); syncAdj(); markFilters(); buildSlots(); buildSwapChips(); buildPaintChips(); schedule();
+    syncModeClasses();                                          // the design may be a collage or a booth layout
   }
   function loadDesigns() { try { return JSON.parse(localStorage.getItem(DESIGNS_KEY) || '[]'); } catch (e) { return []; } }
   function storeDesigns(list) { try { localStorage.setItem(DESIGNS_KEY, JSON.stringify(list)); return true; } catch (e) { toast('Not enough space to save designs'); return false; } }
@@ -1809,13 +1810,15 @@
     chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => selectLayout(it.id));
     chipGroup($('boothSlices'), BOOTH_SLICES(), t => (state.boothSlice || '') === t.id, t => { state.boothSlice = t.id; buildLayouts(); schedule(); });
     const sliced = !!state.boothSlice;
-    $('styleNote').hidden = !sliced;
-    $('styleNote').textContent = 'Sliced photos stay straight and shaped by their slice, so tilted, Polaroid and film styles and photo shapes don\'t apply.';
+    $('styleNote').hidden = !sliced; $('styleRows').hidden = sliced;
+    $('styleNote').textContent = 'Sliced photos stay straight and take the shape of their slice (pick ▭ None for photo styles and shapes).';
     chipGroup($('collageShapes'), SHAPES, it => state.shape === it.id, it => { state.shape = it.id; buildLayouts(); schedule(); });
-    chipGroup($('collages'), COLLAGES.filter(c => c.id !== 'p-diamond' || state.count === 5 || state.layout === c.id), it => state.layout === it.id, it => {
-      if (it.id === 'c-custom') { openCutEditor(); return; }
-      selectLayout(it.id);
-    });
+    const pickCollage = it => { if (it.id === 'c-custom') { openCutEditor(); return; } selectLayout(it.id); buildLayouts(); };
+    chipGroup($('collages'), COLLAGES.filter(c => /^c-/.test(c.id) && c.id !== 'c-custom'), it => state.layout === it.id, pickCollage);
+    // angled designs (and your own cuts, once you've made some)
+    chipGroup($('collagesAngled'), COLLAGES.filter(c => (/^p-/.test(c.id) && (c.id !== 'p-diamond' || state.count === 5 || state.layout === c.id)) || (c.id === 'c-custom' && state.cuts && state.cuts.length)),
+      it => state.layout === it.id, pickCollage);
+    $('collageShapeRow').hidden = /^p-|^c-custom$/.test(state.layout);
     chipGroup($('collageSizes'), SIZES, z => state.collageSize === z.id, z => { state.collageSize = z.id; buildLayouts(); schedule(); });
     [...$('collageSizes').children].forEach((b, i) => { b.title = SIZES[i].hint; });
     $('collageSizeHint').textContent = sizeOf(state.collageSize).hint + ` · ${sizeOf(state.collageSize).w}×${sizeOf(state.collageSize).h}`;
@@ -2770,9 +2773,17 @@
     }
     ctx.restore();
   }
+  // Stickers are kept per layout (their positions only make sense there). A layout you haven't decorated yet
+  // starts with the face props from the one you came from: they re-attach to the same faces.
+  let lastStickerKey = null;
   function curStickers() {
     const k = state.layout + state.count;
-    return state.stickerSets[k] || (state.stickerSets[k] = []);
+    if (!state.stickerSets[k]) {
+      const prev = lastStickerKey && state.stickerSets[lastStickerKey];
+      state.stickerSets[k] = prev ? JSON.parse(JSON.stringify(prev.filter(st => st.face && st.face.slot != null && st.face.slot < state.count))) : [];
+    }
+    lastStickerKey = k;
+    return state.stickerSets[k];
   }
   // Attached stickers (st.face) are re-placed on their face before drawing; `track` switches from
   // "same face in the same photo" (strips) to following the nearest face frame by frame (videos).
@@ -3001,6 +3012,7 @@
   });
 
   function drawStEd(fromHistory) {
+    if (!stEd.list) return;                                  // the studio hasn't been opened yet
     if (fromHistory !== true) noteChange();
     stc.dataset.count = stEd.list.length;
     if ($('stickerEd').hidden) return;
@@ -3478,7 +3490,7 @@
 
   // ================= camera =================
   const CAM_MODES = [
-    { id: 'booth', label: '📸 Photo booth', kind: 'photo' },
+    { id: 'booth', label: '📸 Classic', kind: 'photo' },
     { id: 'glam', label: '✨ Glam', kind: 'photo' },
     { id: 'comic', label: '💥 Comic', kind: 'photo' },
     { id: 'boomerang', label: '🔁 Boomerang', kind: 'video', secs: 1.6 },
@@ -4108,6 +4120,10 @@
     if (th === 'paint') { $('camPropsBtn').setAttribute('aria-pressed', String(true)); requestAnimationFrame(showPicked); return; }
     if (el.children.length) { const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep); }
     add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
+    const one = state.camPropsWho === 'one', who = document.createElement('span'); who.className = 'pt';
+    who.innerHTML = `<b>${one ? '🙂' : '👥'}</b><small>${one ? 'One person' : 'Everyone'}</small>`;
+    add(who, one ? 'Props go on one person (the closest)' : 'Props go on everyone', false, () => { state.camPropsWho = one ? 'all' : 'one'; saveSettings(); buildCamProps(); });
+    el.lastChild.classList.add('paint');
     choices.filter(c => inTheme(themeOf(c.kind, c.id), th)).forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
       state.camProps = hasCamProp(c) ? state.camProps.filter(p => !(p.kind === c.kind && p.id === c.id)) : state.camProps.concat({ kind: c.kind, id: c.id });
       saveSettings(); buildCamProps();
@@ -4173,7 +4189,8 @@
     });
     live.poses = poses;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    poses.forEach(p => state.camProps.forEach(cp => {
+    const wearers = state.camPropsWho === 'one' && poses.length > 1 ? [poses.reduce((a, b) => (b.d > a.d ? b : a))] : poses;
+    wearers.forEach(p => state.camProps.forEach(cp => {
       const st = camSticker(cp, 0, 0), F = st.face, A = p.pts[F.at] || p.pts.eyes;
       const c = Math.cos(p.a), s = Math.sin(p.a), unit = F.s * p.d;
       ctx.save();
@@ -4192,7 +4209,10 @@
     if (!(await PBFace.load())) return;
     slots.forEach(i => { const p = state.photos[i]; if (p) p._faces = PBFace.detect(p.canvas) || []; });
     const L = computeLayout(state.layout, state.count);
-    stripFaces().filter(f => slots.includes(f.slot)).forEach(f => props.forEach(cp => {
+    // on everyone, or just the biggest (closest) face in each photo
+    let faces = stripFaces().filter(f => slots.includes(f.slot));
+    if (state.camPropsWho === 'one') faces = slots.map(i => faces.filter(f => f.slot === i).reduce((a, b) => (!a || b.d > a.d ? b : a), null)).filter(Boolean);
+    faces.forEach(f => props.forEach(cp => {
       const st = camSticker(cp, f.slot, f.idx);
       fitToFace(st, f, L.W, L.H);
       list.push(st);
@@ -4230,7 +4250,7 @@
     keepClip();
     // props worn in the camera ride along on the video, one set per face that was in view
     state.vstickers = state.vstickers.filter(st => !(st.face && st.face.cam));
-    for (let k = 0; k < Math.max(1, live.count); k++) state.camProps.forEach(cp => state.vstickers.push(camSticker(cp, 0, k)));
+    for (let k = 0; k < (state.camPropsWho === 'one' ? 1 : Math.max(1, live.count)); k++) state.camProps.forEach(cp => state.vstickers.push(camSticker(cp, 0, k)));
     saveSettings();
     closeCamera();
     await buildVideo();
