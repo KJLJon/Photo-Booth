@@ -58,6 +58,28 @@
     <div class="btnrow"><button id="openVid" type="button" class="primary vidbtn">🎥 Record a video</button></div>
   </section>
 
+  <details class="card only-photo" data-key="layout">
+    <summary><span>🧩 Layout &amp; style</span><span class="val" id="sum-layout"></span></summary>
+    <div class="body">
+    <h3 style="margin-top:0">Photo booth layouts</h3>
+    <div class="chips" id="layouts"></div>
+    <h3>Collages <span style="font-weight:600">· 1 to 9 photos</span></h3>
+    <div class="chips" id="collages"></div>
+    <div id="collageOpts" hidden>
+      <h3>Collage size</h3>
+      <div class="chips" id="collageSizes"></div>
+      <p class="hint" style="text-align:left" id="collageSizeHint"></p>
+      <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
+      <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
+      <div class="btnrow"><button type="button" id="cutOpen">✂️ Draw your own lines</button></div>
+    </div>
+    <h3>Photo style</h3>
+    <div class="chips" id="styles"></div>
+    <h3>Photo shape</h3>
+    <div class="chips" id="shapes"></div>
+    </div>
+  </details>
+
   <details class="card only-video" data-key="vidsettings" open>
     <summary><span>🎵 Music &amp; size</span><span class="val" id="sum-vidsettings"></span></summary>
     <div class="body">
@@ -66,62 +88,9 @@
       <h3>Picture</h3>
       <div class="chips" id="vidPlainMain"></div>
       <h3>Size</h3>
-      <div class="size-row" style="justify-content:flex-start">
-        <label>📐 <select id="vidSizeMain" aria-label="Video size for social media"></select></label>
-        <label><select id="vidFitMain" aria-label="How to fit it">
-          <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
-          <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
-        </select></label>
-      </div>
-      <p class="hint" style="text-align:left">Tap <b>Remake video</b> below after changing these.</p>
-    </div>
-  </details>
-
-  <details class="card only-photo" data-key="party">
-    <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
-    <div class="body">
-      <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
-        4-shot countdown, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
-      <div class="btnrow">
-        <button type="button" class="primary" id="partyStart">🎉 Start party mode</button>
-        <button type="button" id="galleryOpen">📚 Gallery</button>
-      </div>
-    </div>
-  </details>
-
-  <details class="card" data-key="filters">
-    <summary><span>🪄 Filters</span><span class="val" id="sum-filters"></span></summary>
-    <div class="body">
-      <p class="swipe-hint">Applies to every photo · tap a photo to give just that one its own filter. Swipe for more →</p>
-      <div class="tgrid ftiles" id="filterTiles"></div>
-      <h3>📅 Date stamp <span style="font-weight:600">· like a 2000s camera</span></h3>
-      <div class="chips" id="stampChips"></div>
-      <div class="row" id="stampDateRow" hidden style="justify-content:flex-start;align-items:center">
-        <label class="field" style="margin:0">Date <input type="date" id="stampDate"></label>
-        <button type="button" class="linkbtn" id="stampToday">Use today</button>
-      </div>
-      <h3>🎨 Face paint</h3>
-      <div class="chips hscroll" id="paintChips" style="grid-template-rows:auto"></div>
-      <h3>🧍 Background behind people</h3>
-      <div class="chips hscroll" id="swapChips" style="grid-template-rows:auto"></div>
-      <input type="file" id="swapFile" accept="image/*" hidden>
-      <p class="hint" style="text-align:left" id="swapNote"></p>
-      <h3>Adjust <button type="button" class="linkbtn" id="adjReset" style="float:right;font-size:.8rem">Reset</button></h3>
-      <label class="field slider">☀️ Brightness <input type="range" id="adj-b" min="-1" max="1" step="0.05" value="0"></label>
-      <label class="field slider">◐ Contrast <input type="range" id="adj-c" min="-1" max="1" step="0.05" value="0"></label>
-      <label class="field slider">🎨 Color <input type="range" id="adj-s" min="-1" max="1" step="0.05" value="0"></label>
-    </div>
-  </details>
-
-  <details class="card" data-key="stickers">
-    <summary><span>😎 Stickers &amp; props</span><span class="val" id="sum-stickers"></span></summary>
-    <div class="body">
-      <p class="swipe-hint" style="font-size:.85rem">Sunglasses, googly eyes, hats, animal noses, your own text, speech bubbles and every emoji. Props snap onto faces and stay attached — even if you retake a photo or record a video. Drag them anywhere, pinch to resize and turn.</p>
-      <div class="btnrow">
-        <button type="button" class="primary" id="openStickers">😎 Open sticker studio</button>
-        <button type="button" id="openText">🔤 Add text</button>
-        <button type="button" id="clearStickers">Clear</button>
-      </div>
+      <div class="size-chips" id="vidSizes" role="group" aria-label="Video size for social media"></div>
+      <div class="chips fit-chips" id="vidFits" role="group" aria-label="How to fit it"></div>
+      <p class="size-note" id="vidSizeNote"></p>
     </div>
   </details>
 
@@ -230,27 +199,6 @@
     </div>
   </details>
 
-  <details class="card only-photo" data-key="layout">
-    <summary><span>🧩 Layout &amp; style</span><span class="val" id="sum-layout"></span></summary>
-    <div class="body">
-    <h3 style="margin-top:0">Photo booth layouts</h3>
-    <div class="chips" id="layouts"></div>
-    <h3>Collages <span style="font-weight:600">· 1 to 9 photos</span></h3>
-    <div class="chips" id="collages"></div>
-    <div id="collageOpts" hidden>
-      <h3>Collage size</h3>
-      <div class="chips" id="collageSizes"></div>
-      <p class="hint" style="text-align:left" id="collageSizeHint"></p>
-      <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
-      <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
-      <div class="btnrow"><button type="button" id="cutOpen">✂️ Draw your own lines</button></div>
-    </div>
-    <h3>Photo style</h3>
-    <div class="chips" id="styles"></div>
-    <h3>Photo shape</h3>
-    <div class="chips" id="shapes"></div>
-    </div>
-  </details>
   <details class="card" data-key="frames">
     <summary><span>🖼️ Frames &amp; border</span><span class="val" id="sum-frames"></span></summary>
     <div class="body">
@@ -295,12 +243,62 @@
     </div>
   </details>
 
+  <details class="card" data-key="filters">
+    <summary><span>🪄 Filters &amp; looks</span><span class="val" id="sum-filters"></span></summary>
+    <div class="body">
+      <p class="swipe-hint">Applies to every photo · tap a photo to give just that one its own filter. Swipe for more →</p>
+      <div class="tgrid ftiles" id="filterTiles"></div>
+      <h3>Adjust <button type="button" class="linkbtn" id="adjReset" style="float:right;font-size:.8rem">Reset</button></h3>
+      <label class="field slider">☀️ Brightness <input type="range" id="adj-b" min="-1" max="1" step="0.05" value="0"></label>
+      <label class="field slider">◐ Contrast <input type="range" id="adj-c" min="-1" max="1" step="0.05" value="0"></label>
+      <label class="field slider">🎨 Color <input type="range" id="adj-s" min="-1" max="1" step="0.05" value="0"></label>
+      <h3>📅 Date stamp <span style="font-weight:600">· like a 2000s camera</span></h3>
+      <div class="chips" id="stampChips"></div>
+      <div class="row" id="stampDateRow" hidden style="justify-content:flex-start;align-items:center">
+        <label class="field" style="margin:0">Date <input type="date" id="stampDate"></label>
+        <button type="button" class="linkbtn" id="stampToday">Use today</button>
+      </div>
+      <h3>🧍 Background behind people</h3>
+      <div class="chips hscroll" id="swapChips" style="grid-template-rows:auto"></div>
+      <input type="file" id="swapFile" accept="image/*" hidden>
+      <p class="hint" style="text-align:left" id="swapNote"></p>
+    </div>
+  </details>
+
+  <details class="card" data-key="stickers">
+    <summary><span>😎 Faces &amp; stickers</span><span class="val" id="sum-stickers"></span></summary>
+    <div class="body">
+      <h3 style="margin-top:0">🎨 Face paint <span style="font-weight:600">· follows every face</span></h3>
+      <div class="chips hscroll" id="paintChips" style="grid-template-rows:auto"></div>
+      <p class="hint" style="text-align:left" id="paintNote">Also in the camera (😎 → 🎨 Face paint) and in the sticker studio.</p>
+      <h3>Props &amp; stickers</h3>
+      <p class="swipe-hint" style="font-size:.85rem">Holiday hats, glasses, masks and beards, googly eyes, text and every emoji. Props snap onto faces and stay on, even in videos.</p>
+      <div class="btnrow">
+        <button type="button" class="primary" id="openStickers">😎 Open sticker studio</button>
+        <button type="button" id="openText">🔤 Add text</button>
+        <button type="button" id="clearStickers">Clear</button>
+      </div>
+    </div>
+  </details>
+
   <section id="previewSection" class="only-photo">
     <h2>👀 Preview</h2>
     <div class="preview-wrap"><canvas id="preview"></canvas></div>
     <p class="hint">Tap a photo in the preview to change, move or zoom it.</p>
     <div class="btnrow"><button type="button" id="previewStickers">😎 Stickers &amp; props</button><button type="button" id="previewText">🔤 Add text</button></div>
   </section>
+
+  <details class="card only-photo" data-key="party">
+    <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
+    <div class="body">
+      <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
+        4-shot countdown, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
+      <div class="btnrow">
+        <button type="button" class="primary" id="partyStart">🎉 Start party mode</button>
+        <button type="button" id="galleryOpen">📚 Gallery</button>
+      </div>
+    </div>
+  </details>
 
   <section id="videoSection" class="only-video">
     <h2>🎬 Your video</h2>
@@ -321,7 +319,7 @@
   </section>
 
   <div class="sticky-save">
-    <button id="jump" type="button" aria-label="Show preview">👀</button>
+    <button id="jump" type="button" aria-label="Show the preview" title="Show the preview"><canvas id="mini" width="50" height="88"></canvas></button>
     <button class="primary only-photo" id="save" type="button" disabled>Add photos to save</button>
     <button class="primary only-video vidbtn" id="vidMain" type="button">🎥 Record a video</button>
   </div>
@@ -413,12 +411,9 @@
     <div class="chips save-modes" id="vidModes"></div>
     <video id="outVideo" controls loop playsinline></video>
     <div class="chips save-modes music" id="vidMusic"></div>
-    <div class="size-row" id="vidSizeRow">
-      <label>📐 <select id="vidSize" aria-label="Size for social media"></select></label>
-      <label><select id="vidFit" aria-label="How to fit it">
-        <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
-        <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
-      </select></label>
+    <div id="vidSizeRow">
+      <div class="size-chips" id="vidSheetSizes" role="group" aria-label="Size for social media"></div>
+      <div class="chips fit-chips" id="vidSheetFits" role="group" aria-label="How to fit it"></div>
     </div>
     <p class="hint" id="videoHint"></p>
     <div class="btnrow">

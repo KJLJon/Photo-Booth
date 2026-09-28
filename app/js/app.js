@@ -1368,6 +1368,16 @@
     saveSettings();
     keepPhotosSoon();
     videoPreviewSoon();
+    if (state.appMode !== 'video') updateMini(canvas);
+  }
+  // a live thumbnail of the picture in the bottom bar, so changes show without scrolling down to the preview
+  function updateMini(src) {
+    const m = $('mini'); if (!m || !src || !src.width) return;
+    const H = 88, W = Math.max(40, Math.min(120, Math.round(H * src.width / src.height)));
+    if (m.width !== W || m.height !== H) { m.width = W; m.height = H; }
+    const c = m.getContext('2d'); c.clearRect(0, 0, W, H);
+    const k = Math.min(W / src.width, H / src.height);
+    c.drawImage(src, (W - src.width * k) / 2, (H - src.height * k) / 2, src.width * k, src.height * k);
   }
 
   // ================= keep photos across reloads =================
@@ -2157,7 +2167,9 @@
       b.addEventListener('click', () => onPick(z.id));
       el.appendChild(b);
     });
-    const on = el.querySelector('[aria-pressed="true"]'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // keep the chosen size in view by scrolling the row sideways only (scrollIntoView would also jump the page)
+    const on = el.querySelector('[aria-pressed="true"]');
+    if (on) requestAnimationFrame(() => { if (on.offsetLeft < el.scrollLeft || on.offsetLeft + on.offsetWidth > el.scrollLeft + el.clientWidth) el.scrollLeft = on.offsetLeft - 8; });
   }
   function fillSizeSelect(sel, value) {
     if (!sel.options.length) {
@@ -2448,7 +2460,8 @@
     set('frames', frame + (state.edge !== 'none' ? ' + border' : ''));
     set('filters', (PBFilters.byId[state.filter] || {}).name || 'Original');
     const nSt = curStickers().length;
-    set('stickers', nSt ? `${nSt} on this layout` : 'None');
+    const paint = paintOn() ? plain((PBPaint.EFFECTS.find(e => e.id === state.facePaint) || {}).label || '') : '';
+    set('stickers', [paint, nSt ? `${nSt} sticker${nSt === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'None');
   }
 
   // ================= filter picker =================
@@ -2810,7 +2823,7 @@
     faces: null, getFaces: null };
   const stc = $('stCanvas');
   function openStickers(opts) {
-    stEd.list = opts.list; stEd.base = opts.getBase(); stEd.onDone = opts.onDone; stEd.sel = -1;
+    stEd.list = opts.list; stEd.getBase = opts.getBase; stEd.base = opts.getBase(); stEd.onDone = opts.onDone; stEd.sel = -1;
     if (opts.tab) stEd.tab = opts.tab;
     stEd.video = !!opts.video;
     stEd.before = JSON.stringify(stEd.list);
@@ -3089,7 +3102,15 @@
     svgImage(id);                                              // warm the cache so it draws straight away
     return im;
   }
-  const STICKER_TABS = [{ id: 'props', label: '🎩 Props' }, { id: 'fun', label: '🤪 Fun' }, { id: 'words', label: '🔤 Text' }, { id: 'emoji', label: '😀 Emoji' }];
+  const STICKER_TABS_ALL = [{ id: 'props', label: '🎭 Face props' }, { id: 'paint', label: '🎨 Face paint' }, { id: 'fun', label: '🤪 Stickers' },
+    { id: 'words', label: '🔤 Text' }, { id: 'emoji', label: '😀 Emoji' }];
+  // face paint is drawn on the photos themselves, so it's only offered in the photo studio (a video's paint is set on the main screen)
+  const stickerTabs = () => STICKER_TABS_ALL.filter(t => t.id !== 'paint' || !stEd.video);
+  // after changing the face paint in the studio, redraw the picture under the stickers (again once the face shapes are ready)
+  function studioPaintRefresh() {
+    const go = () => { if ($('stickerEd').hidden || stEd.video || !stEd.getBase) return; stEd.base = stEd.getBase(); drawStEd(true); };
+    go(); [600, 1600, 3500].forEach(t => setTimeout(go, t));
+  }
   let emojiCat = 0, emojiQuery = '';
   function emojiList() {
     const D = window.PBEmojiData || [];
@@ -3126,28 +3147,32 @@
   const themeOf = (kind, id) => kind === 'prop' ? ((PBProps.LIST.find(p => p.id === id) || {}).theme || '')
     : kind === 'svg' ? (((self.PBStickers || []).find(d => d.id === id) || {}).theme || '') : kind === 'paint' ? (PAINT_THEMES[id] || '') : '';
   const inTheme = (th, t) => t === 'all' || (' ' + th + ' ').includes(' ' + t + ' ');
-  function curFaceTheme() {
-    if (faceTheme.cur) return faceTheme.cur;
+  function curFaceTheme() { return faceTheme.cur || occasionTheme(); }
+  function occasionTheme() {
     const words = `${state.theme} ${state.line1 || ''} ${state.line2 || ''}`.toLowerCase();
     return Object.keys(THEME_WORDS).find(k => THEME_WORDS[k].test(words)) || 'all';
   }
   // chips for the themes that have something in `items` ({ kind, id }); returns the theme in use
-  function themeChips(el, items, rebuild, searching) {
-    const has = FACE_THEMES.filter(t => t.id === 'all' || items.some(c => inTheme(themeOf(c.kind, c.id), t.id)));
-    let cur = searching ? 'all' : curFaceTheme(); if (!has.some(t => t.id === cur)) cur = 'all';   // a search looks through everything
+  function themeChips(el, items, rebuild, searching, lead) {
+    const has = (lead || []).concat(FACE_THEMES.filter(t => t.id === 'all' || items.some(c => inTheme(themeOf(c.kind, c.id), t.id))));
+    // a search looks through everything; a choice this list doesn't have (e.g. the camera's "Face paint") falls back to the occasion
+    let cur = searching ? 'all' : curFaceTheme();
+    if (!has.some(t => t.id === cur)) { cur = occasionTheme(); if (!has.some(t => t.id === cur)) cur = 'all'; }
     chipGroup(el, has, t => t.id === cur, t => { faceTheme.cur = t.id; if (searching) { emojiQuery = ''; $('stSearch').value = ''; } rebuild(); });
     const on = el.querySelector('[aria-pressed="true"]');
     if (on) el.scrollLeft = Math.max(0, on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2);
     return cur;
   }
   function buildStickerTray() {
-    chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
+    if (!stickerTabs().some(t => t.id === stEd.tab)) stEd.tab = 'props';
+    chipGroup($('stTabs'), stickerTabs(), t => stEd.tab === t.id, t => { stEd.tab = t.id; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
     const el = $('stItems'); el.innerHTML = ''; el.scrollLeft = 0; el.scrollTop = 0;
     el.classList.toggle('grid', stEd.tab === 'emoji');
     $('stCats').hidden = false;
     $('stTones').hidden = stEd.tab !== 'emoji';
-    $('stCatChips').hidden = stEd.tab === 'words';
-    $('stSearch').placeholder = { props: 'Search props', fun: 'Search stickers', words: 'Search words', emoji: 'Search emoji' }[stEd.tab];
+    $('stCatChips').hidden = !['props', 'emoji'].includes(stEd.tab);
+    $('stSearch').hidden = stEd.tab === 'paint';
+    $('stSearch').placeholder = { props: 'Search hats, glasses, masks…', fun: 'Search stickers', words: 'Search words', emoji: 'Search emoji' }[stEd.tab] || '';
     const add = (content, onClick, cls, title) => {
       const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls;
       if (title) { b.title = title; b.setAttribute('aria-label', title); }
@@ -3155,12 +3180,23 @@
       b.addEventListener('click', onClick); el.appendChild(b);
       return b;
     };
+    // things that sit on a face (drawn props + SVG stickers) vs. everything else
+    const faceProps = PBProps.LIST.filter(p => PBProps.fit('prop', p.id)), otherProps = PBProps.LIST.filter(p => !PBProps.fit('prop', p.id));
+    const SV = self.PBStickers || [], faceSvgs = SV.filter(d => d.face), otherSvgs = SV.filter(d => !d.face);
+    const addProp = (pr) => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name);
+    const addSvg = (d) => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name);
     if (stEd.tab === 'props') {
-      const th = themeChips($('stCatChips'), PBProps.LIST.map(p => ({ kind: 'prop', id: p.id })), buildStickerTray, !!emojiQuery);
-      PBProps.LIST.filter(pr => inTheme(pr.theme, th)).forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name));
+      const th = themeChips($('stCatChips'), faceProps.map(p => ({ kind: 'prop', id: p.id })).concat(faceSvgs.map(d => ({ kind: 'svg', id: d.id }))), buildStickerTray, !!emojiQuery);
+      faceProps.filter(pr => inTheme(pr.theme, th)).forEach(addProp);
+      faceSvgs.filter(d => inTheme(d.theme || '', th)).forEach(addSvg);
     } else if (stEd.tab === 'fun') {
-      const L = self.PBStickers || [], th = themeChips($('stCatChips'), L.map(d => ({ kind: 'svg', id: d.id })), buildStickerTray, !!emojiQuery);
-      L.filter(d => inTheme(d.theme || '', th)).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
+      otherSvgs.forEach(addSvg);
+      otherProps.filter(p => !otherSvgs.some(d => d.name === p.name)).forEach(addProp);   // one of each (the SVG wins)
+    } else if (stEd.tab === 'paint') {
+      PBPaint.EFFECTS.forEach(e => {
+        const b = add(e.id === 'none' ? '🚫 No paint' : e.label, () => { setPaint(e.id); studioPaintRefresh(); buildStickerTray(); }, 'txt', (e.id === 'none' ? 'No' : e.label.replace(/^\S+ /, '')) + ' face paint');
+        b.setAttribute('aria-pressed', String((state.facePaint || 'none') === e.id));
+      });
     } else if (stEd.tab === 'words') {
       add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
       add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
@@ -3710,7 +3746,7 @@
     [...$('appMode').children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === state.appMode)));
     $('openStickers').textContent = state.appMode === 'video' ? '😎 Video sticker studio' : '😎 Open sticker studio';
     saveSettings();
-    if (state.appMode === 'video') { buildVidSettings(); drawVideoPreview(); }
+    if (state.appMode === 'video') { buildVidSettings(); drawVideoPreview(); } else updateMini(canvas);
   }
   [...$('appMode').children].forEach(b => b.addEventListener('click', () => setAppMode(b.dataset.mode)));
   function buildVidSettings() {
@@ -3723,13 +3759,20 @@
     chipGroup($('vidMusicMain'), PBMusic.TUNES, t => (state.music || 'none') === t.id, t => { try { audioCtx(); } catch (e) { /* no audio */ } state.music = t.id; buildVidSettings(); drawVideoPreview(); saveSettings(); });
     chipGroup($('vidPlainMain'), [{ v: false, label: '🎉 Booth design' }, { v: true, label: '🎥 Just the video' }], o => !!state.vplain === o.v,
       o => { state.vplain = o.v; buildVidSettings(); drawVideoPreview(); saveSettings(); });
-    fillSizeSelect($('vidSizeMain'), state.vidSize); $('vidFitMain').value = state.vidFit; $('vidFitMain').hidden = state.vidSize === 'orig';
+    vidSizeChips($('vidSizes'), $('vidFits'), () => drawVideoPreview());
+    const Zv = SIZES.find(z => z.id === state.vidSize);
+    $('vidSizeNote').textContent = Zv ? `${Zv.w}×${Zv.h} · ${Zv.hint}` : 'The booth picture as it is (tall 9:16). Pick a size to fit a social app.';
     const sz = state.vidSize === 'orig' ? 'Original size' : plain(labelOf(SIZES, state.vidSize));
     const m = PBMusic.TUNES.find(t => t.id === (state.music || 'none'));
     $('sum-vidsettings').textContent = `${plain(m.label)} · ${sz}`;
   }
-  $('vidSizeMain').addEventListener('change', (e) => { state.vidSize = e.target.value; buildVidSettings(); drawVideoPreview(); saveSettings(); });
-  $('vidFitMain').addEventListener('change', (e) => { state.vidFit = e.target.value; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+  // the video's size & fit as tap-to-pick chips (same as the photo save screen); after() runs on a change
+  function vidSizeChips(sizesEl, fitsEl, after) {
+    const origR = state.vplain ? (cam.last ? (clipStill(cam.last.clip).width / clipStill(cam.last.clip).height) || .75 : .75) : 720 / 1280;
+    buildSizeChips(sizesEl, state.vidSize, origR, id => { if (state.vidSize === id) return; state.vidSize = id; saveSettings(); after(); });
+    chipGroup(fitsEl, FITS, f => f.id === state.vidFit, f => { if (state.vidFit === f.id) return; state.vidFit = f.id; saveSettings(); after(); });
+    fitsEl.hidden = state.vidSize === 'orig';
+  }
   function videoHint(id) {
     return { boomerang: 'Records about 1.5 seconds, then loops it back and forth.', strobe: 'Flashing strobe frames stitched into a flickery clip. Dance!',
       slowmo: 'Records 3 seconds and plays it back in slow motion.', spin: 'Records 6 seconds with a fast–slow–fast speed ramp. Walk around the person, or have them spin.' }[id] || '';
@@ -3898,9 +3941,22 @@
       b.addEventListener('click', click); el.appendChild(b);
     };
     const choices = faceChoices();
-    const th = themeChips($('camPropThemes'), choices.concat(PBPaint.EFFECTS.map(e => ({ kind: 'paint', id: e.id }))), buildCamProps);
-    PBPaint.EFFECTS.filter(e => e.id !== 'none' && inTheme(themeOf('paint', e.id), th)).forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id,
-      () => { setPaint(state.facePaint === e.id ? 'none' : e.id); buildCamProps(); }));
+    // "🎨 Face paint" always lists every paint; a holiday theme shows its props plus the paints that suit it
+    const th = themeChips($('camPropThemes'), choices.concat(PBPaint.EFFECTS.map(e => ({ kind: 'paint', id: e.id }))), buildCamProps, false,
+      [{ id: 'paint', label: '🎨 Face paint' }]);
+    const paintBtn = (e) => {
+      const w = document.createElement('span'); w.className = 'pt';
+      const i = document.createElement('b'); i.textContent = e.label.split(' ')[0];
+      const t = document.createElement('small'); t.textContent = e.id === 'none' ? 'No paint' : e.label.replace(/^\S+ /, '');
+      w.append(i, t); return w;
+    };
+    const paints = PBPaint.EFFECTS.filter(e => th === 'paint' || (e.id !== 'none' && inTheme(themeOf('paint', e.id), th)));
+    paints.forEach(e => add(paintBtn(e), (e.id === 'none' ? 'No' : e.label.replace(/^\S+ /, '')) + ' face paint',
+      e.id === 'none' ? !paintOn() : (state.facePaint || 'none') === e.id,
+      () => { setPaint(e.id === 'none' || state.facePaint === e.id ? 'none' : e.id); buildCamProps(); }));
+    [...el.children].forEach(b => b.classList.add('paint'));
+    const showPicked = () => { const on = [...el.children].find(b => b.getAttribute('aria-pressed') === 'true'); if (on) el.scrollLeft = Math.max(0, on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2); };
+    if (th === 'paint') { $('camPropsBtn').setAttribute('aria-pressed', String(true)); requestAnimationFrame(showPicked); return; }
     if (el.children.length) { const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep); }
     add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
     choices.filter(c => inTheme(themeOf(c.kind, c.id), th)).forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
@@ -4312,7 +4368,7 @@
   // ---- "Your video" on the main page: live design preview + remake, and the clip kept on the device ----
   const designSig = () => JSON.stringify([designOf(), state.vplain, state.music, state.adj, state.bgSwap, state.facePaint, swapImageId, state.vidFrame, state.vidCrop]);
   let vidPrevTimer = 0;
-  function videoPreviewSoon() { if (!cam.last) return; clearTimeout(vidPrevTimer); vidPrevTimer = setTimeout(drawVideoPreview, 250); }
+  function videoPreviewSoon() { if (!cam.last && state.appMode !== 'video') return; clearTimeout(vidPrevTimer); vidPrevTimer = setTimeout(drawVideoPreview, 250); }
   function clipStill(clip) { return clip.frames ? clip.frames[Math.floor(clip.frames.length / 2)] : clip.still; }
   // before anything is recorded, a stand-in frame shows how the design will look
   let placeholder = null;
@@ -4401,6 +4457,7 @@
       out.getContext('2d').drawImage(comp.out, 0, 0, out.width, out.height);
       out._crop = null;
     }
+    if (state.appMode === 'video') updateMini(comp.out);
     // for dragging the clip around its window: preview pixels → clip pixels
     const kfit = !Z ? 1 : state.vidFit === 'fill' ? cropFrame(comp.W, comp.H, comp.out.width, comp.out.height, state.vidCrop).k
       : Math.min(comp.out.width / comp.W, comp.out.height / comp.H);
@@ -4462,7 +4519,7 @@
     const v = $('outVideo'); v.src = vid.url; v.muted = !state.music || state.music === 'none';
     v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
     $('vidDl').href = vid.url; $('vidDl').download = vid.file.name;
-    fillSizeSelect($('vidSize'), state.vidSize); $('vidFit').value = state.vidFit; $('vidFit').hidden = state.vidSize === 'orig';
+    vidSizeChips($('vidSheetSizes'), $('vidSheetFits'), async () => { closeVideoSheet(); await buildVideo(); });
     chipGroup($('vidMusic'), PBMusic.TUNES, t => (state.music || 'none') === t.id, async t => {
       if (state.music === t.id) return;
       try { audioCtx(); } catch (e) { /* no audio here */ }
@@ -4487,9 +4544,6 @@
   }
   function closeVideoSheet() { $('videoSheet').hidden = true; $('outVideo').pause(); syncScroll(); }
   $('vidClose').addEventListener('click', closeVideoSheet);
-  const remakeFor = (k) => async (e) => { state[k] = e.target.value; saveSettings(); closeVideoSheet(); await buildVideo(); };
-  $('vidSize').addEventListener('change', remakeFor('vidSize'));
-  $('vidFit').addEventListener('change', remakeFor('vidFit'));
   $('vidShare').addEventListener('click', async () => { try { await navigator.share({ files: [vid.file] }); } catch (e) { /* cancelled */ } });
   $('vidRetake').addEventListener('click', () => { const m = cam.last && cam.last.mode; closeVideoSheet(); openCamera({ mode: m ? m.id : 'boomerang' }); });
 
