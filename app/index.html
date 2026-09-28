@@ -46,6 +46,18 @@
     <input type="file" id="replaceInput" accept="image/*" hidden>
   </section>
 
+  <details class="card" data-key="party">
+    <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
+    <div class="body">
+      <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
+        4-shot countdown, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
+      <div class="btnrow">
+        <button type="button" class="primary" id="partyStart">🎉 Start party mode</button>
+        <button type="button" id="galleryOpen">📚 Gallery</button>
+      </div>
+    </div>
+  </details>
+
   <details class="card" data-key="filters">
     <summary><span>🪄 Filters</span><span class="val" id="sum-filters"></span></summary>
     <div class="body">
@@ -330,6 +342,41 @@
   </div>
 </div>
 
+<div id="party" hidden>
+  <div class="party-attract" id="partyAttract">
+    <div class="party-emoji" aria-hidden="true">📸</div>
+    <div class="party-title" id="partyTitle"></div>
+    <div class="party-sub">Grab your friends &amp; strike a pose!</div>
+    <button type="button" class="party-go" id="partyGo">Tap to start</button>
+    <div class="party-note" id="partyNote"></div>
+  </div>
+  <div class="party-result" id="partyResult" hidden>
+    <img id="partyImg" alt="Your photo strip">
+    <div class="party-side">
+      <div class="party-title small">Looking good! 🎉</div>
+      <button type="button" class="party-btn primary" id="partyShare">📤 Send to my phone</button>
+      <button type="button" class="party-btn" id="partyPrint">🖨️ Print</button>
+      <button type="button" class="party-btn" id="partyDone">✓ Done</button>
+      <div class="party-qr"><canvas id="partyQR" width="148" height="148"></canvas><span>Scan to make your own</span></div>
+      <div class="party-note" id="partyTimer"></div>
+    </div>
+  </div>
+  <button type="button" class="party-exit" id="partyExit" aria-label="Hold to leave party mode" title="Hold to leave party mode">✕</button>
+</div>
+
+<div id="gallery" class="overlay" hidden>
+  <div class="sheet">
+    <h2>📚 Party gallery</h2>
+    <p class="hint" id="galleryHint"></p>
+    <div class="gallery-grid" id="galleryGrid"></div>
+    <div class="btnrow">
+      <button type="button" id="galleryShare">📤 Share all</button>
+      <button type="button" id="galleryClear" class="danger">🗑️ Delete all</button>
+    </div>
+    <button type="button" class="cancel" id="galleryClose">Close</button>
+  </div>
+</div>
+
 <div id="stickerEd" hidden>
   <div class="ed-top">
     <div class="ed-left">
@@ -418,6 +465,7 @@
 <script src="js/emoji-data.js"></script>
 <script src="js/encoders.js"></script>
 <script src="js/face.js"></script>
+<script src="js/lib/qrcode.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

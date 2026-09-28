@@ -952,15 +952,17 @@
   let pdb = null;
   function photoDB() {
     if (!pdb) pdb = new Promise((res, rej) => {
-      const r = indexedDB.open(PDB, 1);
-      r.onupgradeneeded = () => r.result.createObjectStore(PSTORE);
+      const r = indexedDB.open(PDB, 2);
+      r.onupgradeneeded = () => {
+        for (const n of [PSTORE, 'strips']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n, n === 'strips' ? { autoIncrement: true } : undefined);
+      };
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     });
     return pdb;
   }
-  function photoTx(mode, fn) {
+  function photoTx(mode, fn, store) {
     return photoDB().then(d => new Promise((res, rej) => {
-      const tx = d.transaction(PSTORE, mode), req = fn(tx.objectStore(PSTORE));
+      const tx = d.transaction(store || PSTORE, mode), req = fn(tx.objectStore(store || PSTORE));
       tx.oncomplete = () => res(req && req.result); tx.onerror = tx.onabort = () => rej(tx.error);
     }));
   }
@@ -1348,7 +1350,7 @@
   }
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
   const isAndroid = /Android/i.test(navigator.userAgent);
-  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor'];
+  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery'];
   function syncScroll() { document.body.style.overflow = OVERLAYS.some(id => !$(id).hidden) ? 'hidden' : ''; }
   function stamp() {
     const d = new Date(), pad = (n) => String(n).padStart(2, '0');
@@ -2412,7 +2414,7 @@
     cam.stream = null; camVideo.srcObject = null;
   }
   function closeCamera() {
-    cam.cancel = true; stopStream(); liveStop();
+    cam.cancel = true; cam.party = false; stopStream(); liveStop();
     $('camera').hidden = true; $('camCount').hidden = true; $('camRec').hidden = true;
     syncScroll();
   }
@@ -2495,6 +2497,7 @@
     }
   }
   function showReview() {
+    if (party.on) { usePhotos().then(partyResult); return; }   // party mode: no review, straight to the strip
     const n = shotsNeeded(), g = $('reviewGrid'); g.innerHTML = '';
     g.style.gridTemplateColumns = n === 1 ? 'minmax(0, 240px)' : n === 4 ? '1fr 1fr' : 'repeat(3, 1fr)';
     g.style.justifyContent = 'center';
@@ -2516,7 +2519,8 @@
     const old = state.photos[i]; if (old) URL.revokeObjectURL(old.url);
     state.photos[i] = { canvas: c, url: URL.createObjectURL(blob), zoom: 1, cx: null, cy: null, filter: null };
   }
-  $('revUse').addEventListener('click', async () => {
+  $('revUse').addEventListener('click', () => usePhotos());
+  async function usePhotos() {
     const n = shotsNeeded(), special = cam.mode === 'glam' || cam.mode === 'comic' ? camFilter() : null;
     const slots = [];
     for (let k = 0; k < n; k++) {
@@ -2525,16 +2529,17 @@
       if (special && cam.slot >= 0) state.photos[slot].filter = special;
       slots.push(slot);
     }
-    applyCamProps(slots);
+    await applyCamProps(slots);
     if (special && cam.slot < 0) {
       state.filter = special;
       if (cam.mode === 'comic') applyComicLook();
     }
     const wasComic = cam.mode === 'comic' && cam.slot < 0;
     closeCamera(); markFilters(); buildSlots(); schedule();
+    if (party.on) return;
     toast(wasComic ? '💥 Comic page ready!' : n > 1 ? 'Photos added!' : 'Photo replaced');
     setTimeout(() => $('previewSection').scrollIntoView({ behavior: 'smooth', block: 'start' }), 250);
-  });
+  }
   function applyComicLook() {
     Object.assign(state, {
       theme: 'action', layout: 'grid', style: 'straight', shape: 'rect', frame: 'black', frameSize: 1.4, font: 'bold',
@@ -2578,6 +2583,139 @@
   });
   $('camExtra').addEventListener('click', () => { cam.glamBW = !cam.glamBW; buildCamUI(); applyPreview(); });
   $('openCam').addEventListener('click', () => openCamera());
+
+  // ================= party mode =================
+  // A kiosk for guests: full screen, one big button, 4-shot countdown (with the host's design, stickers
+  // and camera props), then the strip to share or print. Strips are kept in a gallery on this device.
+  // (Sending a strip to a guest's own phone by QR needs a server — see ROADMAP.md.)
+  const party = { on: false, lock: null, idle: 0, left: 0 };
+  async function enterParty() {
+    party.on = true;
+    $('partyTitle').textContent = state.line1 || 'Photo Booth';
+    $('party').hidden = false; syncScroll();
+    partyAttract();
+    try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (e) { /* not allowed here */ }
+    try { party.lock = await navigator.wakeLock.request('screen'); } catch (e) { /* keeps the screen on where supported */ }
+    drawQR($('partyQR'), location.href.split('#')[0]);
+  }
+  function exitParty() {
+    party.on = false; clearInterval(party.idle);
+    $('camera').classList.remove('party');
+    $('party').hidden = true; syncScroll();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (party.lock) { party.lock.release().catch(() => {}); party.lock = null; }
+  }
+  async function partyAttract() {
+    clearInterval(party.idle);
+    $('partyAttract').hidden = false; $('partyResult').hidden = true;
+    const n = await stripCount();
+    $('partyNote').textContent = n ? `${n} strip${n === 1 ? '' : 's'} taken so far 🎉` : '';
+  }
+  function partyShoot() {
+    // guests' photos never mix with the next group's
+    state.photos = [null, null, null, null];
+    cam.party = true; cam.timer = cam.timer || 3;
+    $('camera').classList.add('party');
+    openCamera({ mode: 'booth' }).then(() => { if (party.on && cam.stream) $('camShutter').click(); });
+  }
+  let partyBlob = null;
+  async function partyResult() {
+    render();
+    partyBlob = await toJpeg(canvas);
+    $('partyImg').src = URL.createObjectURL(partyBlob);
+    $('partyAttract').hidden = true; $('partyResult').hidden = false;
+    $('partyShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([partyBlob], 'strip.jpg', { type: 'image/jpeg' })] }));
+    photoTx('readwrite', s => s.add({ blob: partyBlob, at: Date.now() }), 'strips').catch(() => {});
+    // back to the start screen by itself if nobody touches it
+    party.left = 45;
+    clearInterval(party.idle);
+    party.idle = setInterval(() => {
+      party.left--;
+      $('partyTimer').textContent = `Next group in ${party.left}s`;
+      if (party.left <= 0) partyDone();
+    }, 1000);
+  }
+  function partyDone() {
+    clearInterval(party.idle);
+    if ($('partyImg').src) URL.revokeObjectURL($('partyImg').src);
+    state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
+    state.photos = [null, null, null, null]; buildSlots(); schedule();
+    partyAttract();
+  }
+  $('partyResult').addEventListener('pointerdown', () => { party.left = 45; });
+  $('partyStart').addEventListener('click', enterParty);
+  $('partyGo').addEventListener('click', partyShoot);
+  $('partyDone').addEventListener('click', partyDone);
+  $('partyShare').addEventListener('click', async () => {
+    try { await navigator.share({ files: [new File([partyBlob], `photobooth-${stamp()}.jpg`, { type: 'image/jpeg' })] }); } catch (e) { /* cancelled */ }
+  });
+  $('partyPrint').addEventListener('click', () => printImage(partyBlob));
+  // hold ✕ for 1.5 s to leave, so guests don't exit by accident
+  (() => {
+    const b = $('partyExit'); let t0 = 0, raf = 0;
+    const stop = () => { cancelAnimationFrame(raf); b.classList.remove('holding'); b.style.removeProperty('--p'); };
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - t0) / 1500);
+      b.style.setProperty('--p', Math.round(p * 100) + '%');
+      if (p >= 1) { stop(); exitParty(); return; }
+      raf = requestAnimationFrame(tick);
+    };
+    b.addEventListener('pointerdown', () => { t0 = performance.now(); b.classList.add('holding'); raf = requestAnimationFrame(tick); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop));
+    b.addEventListener('click', () => { if (!b.classList.contains('holding')) toast('Hold ✕ to leave party mode'); });
+  })();
+  function printImage(blob) {
+    if (!blob) return;
+    let area = $('printArea');
+    if (!area) { area = document.createElement('div'); area.id = 'printArea'; document.body.appendChild(area); }
+    area.innerHTML = '';
+    const img = document.createElement('img'); img.src = URL.createObjectURL(blob);
+    img.onload = () => { window.print(); setTimeout(() => URL.revokeObjectURL(img.src), 1000); };
+    area.appendChild(img);
+  }
+  function drawQR(cv, text) {
+    if (!window.qrcode) return;
+    const q = qrcode(0, 'M'); q.addData(text); q.make();
+    const n = q.getModuleCount(), ctx = cv.getContext('2d'), k = Math.floor(cv.width / (n + 2)), o = Math.floor((cv.width - k * n) / 2);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#1b1b1b';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(o + c * k, o + r * k, k, k);
+  }
+
+  // ---- party gallery ----
+  function stripCount() { return photoTx('readonly', s => s.count(), 'strips').catch(() => 0); }
+  function allStrips() {
+    return photoTx('readonly', s => s.getAll(), 'strips').catch(() => []);
+  }
+  async function openGallery() {
+    const list = await allStrips(), g = $('galleryGrid');
+    [...g.querySelectorAll('img')].forEach(im => URL.revokeObjectURL(im.src));
+    g.innerHTML = '';
+    $('galleryHint').textContent = list.length
+      ? `${list.length} strip${list.length === 1 ? '' : 's'} saved on this device. Tap one to save or share it.`
+      : 'Strips from party mode show up here.';
+    list.slice().reverse().forEach(rec => {
+      const b = document.createElement('button'); b.type = 'button';
+      const im = document.createElement('img'); im.src = URL.createObjectURL(rec.blob); im.alt = '';
+      b.appendChild(im);
+      b.addEventListener('click', () => showSaveSheet(rec.blob, `photobooth-${new Date(rec.at).toISOString().slice(0, 19).replace(/[-:T]/g, '')}.jpg`, 'Party strip', photoHint()));
+      g.appendChild(b);
+    });
+    $('galleryShare').hidden = !list.length || !(navigator.canShare && navigator.canShare({ files: [new File([list[0].blob], 'a.jpg', { type: 'image/jpeg' })] }));
+    $('galleryClear').hidden = !list.length;
+    $('gallery').hidden = false; syncScroll();
+  }
+  $('galleryOpen').addEventListener('click', openGallery);
+  $('galleryClose').addEventListener('click', () => { $('gallery').hidden = true; syncScroll(); });
+  $('galleryShare').addEventListener('click', async () => {
+    const list = await allStrips();
+    const files = list.map((r, i) => new File([r.blob], `party-strip-${i + 1}.jpg`, { type: 'image/jpeg' }));
+    try { await navigator.share({ files }); } catch (e) { /* cancelled or too many */ }
+  });
+  $('galleryClear').addEventListener('click', async () => {
+    if (!confirm('Delete every strip in the party gallery on this device?')) return;
+    await photoTx('readwrite', s => s.clear(), 'strips').catch(() => {});
+    openGallery();
+  });
 
   // ================= live face props in the camera =================
   // Pick props before the shot and see them on everyone's face in the preview. The captured photos /
