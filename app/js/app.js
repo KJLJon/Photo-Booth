@@ -239,39 +239,119 @@
     gold: ['#f5d06f', '#d4a017', '#fff3c4', '#e8b923'],
     dark: ['#1f1f1f', '#3a3a3a', '#555555']
   };
-  function decorate(ctx, W, H, r, kind, colors) {
-    const s = W / 900;
+  // 2–3 colour fades for "Your Colors"
+  const FADE_DIRS = [{ id: 'down', label: '⬇️ Down' }, { id: 'diag', label: '↘️ Corner' }, { id: 'diag2', label: '↙️ Other corner' },
+    { id: 'across', label: '➡️ Across' }, { id: 'radial', label: '🔘 From the middle' }];
+  function fade(ctx, W, H, cols, dir) {
+    let g;
+    if (dir === 'radial') g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.hypot(W, H) / 2);
+    else if (dir === 'across') g = ctx.createLinearGradient(0, 0, W, 0);
+    else if (dir === 'diag2') g = ctx.createLinearGradient(W, 0, 0, H);
+    else if (dir === 'diag') g = ctx.createLinearGradient(0, 0, W, H);
+    else g = ctx.createLinearGradient(0, 0, 0, H);
+    cols.forEach((c, i) => g.addColorStop(i / (cols.length - 1), c));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  const PALETTES = [
+    { name: 'Sunset', c: ['#ff9a8b', '#ff6a88', '#ffc796'] }, { name: 'Ocean', c: ['#2193b0', '#6dd5ed'] },
+    { name: 'Candy', c: ['#ff9a9e', '#fad0c4', '#fbc2eb'] }, { name: 'Mint', c: ['#a8edea', '#fed6e3'] },
+    { name: 'Lavender', c: ['#8ec5fc', '#e0c3fc'] }, { name: 'Peach', c: ['#ffecd2', '#fcb69f'] },
+    { name: 'Galaxy', c: ['#0f0c29', '#302b63', '#7a3d9c'] }, { name: 'Forest', c: ['#134e5e', '#71b280'] },
+    { name: 'Gold', c: ['#f7971e', '#ffd200'] }, { name: 'Berry', c: ['#8e2de2', '#4a00e0'] },
+    { name: 'Fire', c: ['#f12711', '#f5af19'] }, { name: 'Sky', c: ['#89f7fe', '#66a6ff'] },
+    { name: 'Blush', c: ['#ffdde1', '#ee9ca7'] }, { name: 'Night', c: ['#141e30', '#243b55'] },
+    { name: 'Rose gold', c: ['#b76e79', '#eacda3', '#e6b8a2'] }, { name: 'Pastel rainbow', c: ['#ff9a9e', '#fecfef', '#a1c4fd'] },
+    { name: 'Lemonade', c: ['#fff6b7', '#f6416c'] }, { name: 'Aqua', c: ['#13547a', '#80d0c7'] },
+    { name: 'Grape', c: ['#654ea3', '#eaafc8'] }, { name: 'Mono', c: ['#e0e0e0', '#8e8e8e'] }
+  ];
+  const DECOS = [
+    { id: 'none', label: 'Nothing' }, { id: 'confetti', label: '🎊 Confetti' }, { id: 'dots', label: '• Dots' }, { id: 'polka', label: '⚪ Polka' },
+    { id: 'stars', label: '⭐ Stars' }, { id: 'sparkles', label: '✨ Sparkles' }, { id: 'hearts', label: '💕 Hearts' }, { id: 'bokeh', label: '🔆 Bokeh' },
+    { id: 'bubbles', label: '🫧 Bubbles' }, { id: 'balloons', label: '🎈 Balloons' }, { id: 'snow', label: '❄️ Snow' }, { id: 'flowers', label: '🌸 Flowers' },
+    { id: 'stripes', label: '▧ Stripes' }, { id: 'rays', label: '☀️ Rays' }, { id: 'zigzag', label: '〰 Zigzag' }, { id: 'waves', label: '🌊 Waves' }
+  ];
+  function decorate(ctx, W, H, r, kind, colors, density) {
+    const s = W / 900, dn = density || 1;
+    const N = (k) => Math.max(1, Math.round(k * dn));
     const col = () => pick(r, colors);
     switch (kind) {
-      case 'confetti': confettiPieces(ctx, W, H, r, Math.round(W * H / 5500), colors, s); break;
+      case 'confetti': confettiPieces(ctx, W, H, r, N(W * H / 5500), colors, s); break;
       case 'dots':
-        for (let i = 0; i < Math.round(W * H / 9000); i++) {
+        for (let i = 0; i < N(W * H / 9000); i++) {
           ctx.fillStyle = col(); ctx.beginPath(); ctx.arc(r() * W, r() * H, (6 + r() * 16) * s, 0, Math.PI * 2); ctx.fill();
         }
         break;
       case 'stars':
-        for (let i = 0; i < Math.round(W * H / 16000); i++) { ctx.fillStyle = col(); star(ctx, r() * W, r() * H, (10 + r() * 22) * s, r() * Math.PI); }
+        for (let i = 0; i < N(W * H / 16000); i++) { ctx.fillStyle = col(); star(ctx, r() * W, r() * H, (10 + r() * 22) * s, r() * Math.PI); }
         break;
       case 'hearts':
-        for (let i = 0; i < Math.round(W * H / 14000); i++) { ctx.fillStyle = col(); heart(ctx, r() * W, r() * H, (12 + r() * 26) * s, (r() - .5) * .8); }
+        for (let i = 0; i < N(W * H / 14000); i++) { ctx.fillStyle = col(); heart(ctx, r() * W, r() * H, (12 + r() * 26) * s, (r() - .5) * .8); }
         break;
       case 'balloons':
-        for (let i = 0; i < Math.round(H / 110); i++) {
+        for (let i = 0; i < N(H / 110); i++) {
           const edge = r() < 0.5 ? r() * W * 0.14 : W - r() * W * 0.14;
           balloon(ctx, r() < 0.75 ? edge : r() * W, r() * H, (34 + r() * 36) * s, col());
         }
         break;
       case 'snow':
-        for (let i = 0; i < Math.round(W * H / 4000); i++) {
+        for (let i = 0; i < N(W * H / 4000); i++) {
           ctx.fillStyle = col(); ctx.beginPath(); ctx.arc(r() * W, r() * H, (1.5 + r() * 3) * s, 0, Math.PI * 2); ctx.fill();
         }
-        for (let i = 0; i < Math.round(W * H / 20000); i++) { ctx.strokeStyle = col(); snowflake(ctx, r() * W, r() * H, (12 + r() * 24) * s, 3 * s); }
+        for (let i = 0; i < N(W * H / 20000); i++) { ctx.strokeStyle = col(); snowflake(ctx, r() * W, r() * H, (12 + r() * 24) * s, 3 * s); }
         break;
       case 'sparkles':
-        for (let i = 0; i < Math.round(W * H / 12000); i++) { ctx.fillStyle = col(); sparkle(ctx, r() * W, r() * H, (6 + r() * 16) * s); }
+        for (let i = 0; i < N(W * H / 12000); i++) { ctx.fillStyle = col(); sparkle(ctx, r() * W, r() * H, (6 + r() * 16) * s); }
         break;
+      case 'polka': {
+        const step = W / Math.max(3, Math.round(7 * dn)), rad = step * .22; let row = 0;
+        for (let y = step / 2; y < H + step; y += step * .866, row++) for (let x = (row % 2 ? step / 2 : 0); x < W + step; x += step) {
+          ctx.fillStyle = col(); ctx.globalAlpha = .85; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1; break;
+      }
+      case 'bokeh':
+        for (let i = 0; i < N(W * H / 30000); i++) {
+          const x = r() * W, y = r() * H, R = (20 + r() * 70) * s, g = ctx.createRadialGradient(x, y, 0, x, y, R), c = col();
+          g.addColorStop(0, c); g.addColorStop(.7, c); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.globalAlpha = .18 + r() * .3; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1; break;
+      case 'bubbles':
+        for (let i = 0; i < N(W * H / 22000); i++) {
+          const x = r() * W, y = r() * H, R = (10 + r() * 40) * s;
+          ctx.strokeStyle = col(); ctx.globalAlpha = .7; ctx.lineWidth = 3 * s; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = '#ffffff'; ctx.globalAlpha = .6; ctx.beginPath(); ctx.ellipse(x - R * .35, y - R * .4, R * .2, R * .12, -.6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1; break;
+      case 'stripes': {
+        const sw = W / Math.max(4, Math.round(10 * dn));
+        ctx.save(); ctx.globalAlpha = .22; ctx.translate(W / 2, H / 2); ctx.rotate(-Math.PI / 4);
+        const L = Math.hypot(W, H);
+        for (let x = -L, i = 0; x < L; x += sw * 2, i++) { ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(x, -L, sw, L * 2); }
+        ctx.restore(); break;
+      }
+      case 'rays': {
+        const n = Math.max(8, Math.round(24 * dn)), cx = W / 2, cy = H * .35, R = Math.hypot(W, H);
+        ctx.globalAlpha = .18;
+        for (let k = 0; k < n; k++) { const a0 = k * Math.PI * 2 / n, a1 = a0 + Math.PI / n; ctx.fillStyle = colors[k % colors.length];
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a0) * R, cy + Math.sin(a0) * R); ctx.lineTo(cx + Math.cos(a1) * R, cy + Math.sin(a1) * R); ctx.fill(); }
+        ctx.globalAlpha = 1; break;
+      }
+      case 'zigzag': case 'waves': {
+        const gap = H / Math.max(4, Math.round(12 * dn)), amp = gap * .28, wl = W / 10;
+        ctx.lineWidth = 7 * s; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.globalAlpha = .45;
+        for (let y = gap / 2, i = 0; y < H + gap; y += gap, i++) {
+          ctx.strokeStyle = colors[i % colors.length]; ctx.beginPath();
+          for (let x = -wl; x <= W + wl; x += kind === 'zigzag' ? wl / 2 : wl / 8) {
+            const yy = kind === 'zigzag' ? y + ((Math.round(x / (wl / 2)) % 2) ? amp : -amp) : y + Math.sin(x / wl * Math.PI * 2) * amp;
+            x === -wl ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+          }
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1; break;
+      }
       case 'flowers':
-        for (let i = 0; i < Math.round(W * H / 20000); i++) flower(ctx, r() * W, r() * H, (14 + r() * 20) * s, col(), r() * 6);
+        for (let i = 0; i < N(W * H / 20000); i++) flower(ctx, r() * W, r() * H, (14 + r() * 20) * s, col(), r() * 6);
         break;
     }
   }
@@ -548,12 +628,13 @@
       } },
     minblack: { name: 'Simple Black', accent: '#000000',
       draw(ctx, W, H) { ctx.fillStyle = '#141414'; ctx.fillRect(0, 0, W, H); } },
-    custom: { name: 'Your Colors', custom: true,
+    custom: { name: 'Your Colors & Fade', custom: true,
       get accent() { return shade(state.custom.c2, -0.45); },
       draw(ctx, W, H, r) {
-        const c = state.custom;
-        vGrad(ctx, W, H, [c.c1, c.c2], true);
-        if (c.deco !== 'none') decorate(ctx, W, H, r, c.deco, DECO_COLORS[c.decoColor] || DECO_COLORS.bright);
+        const c = state.custom, cols = c.use3 && c.c3 ? [c.c1, c.c2, c.c3] : [c.c1, c.c2];
+        fade(ctx, W, H, cols, c.dir || 'diag');
+        const dc = c.decoColor === 'match' ? cols.map(x => shade(x, .35)).concat(['#ffffff']) : (DECO_COLORS[c.decoColor] || DECO_COLORS.bright);
+        if (c.deco !== 'none') decorate(ctx, W, H, r, c.deco, dc, c.density || 1);
       } },
     photo: { name: 'Your Photo', accent: '#000000',
       draw(ctx, W, H) {
@@ -627,7 +708,7 @@
     iconLeft: '🎈', iconRight: '🎂', iconPos: 'sub',
     frame: 'white', frameColor: '#ffffff', frameSize: 1, shadow: true,
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
-    custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
+    custom: { c1: '#ff9a8b', c2: '#7f53ac', c3: '#ffd6a5', use3: false, dir: 'diag', deco: 'confetti', decoColor: 'bright', density: 1 },
     bgDim: 0.2, preset: 0,
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
@@ -1700,8 +1781,7 @@
     $('edge').value = state.edge;
     $('edgeColor').value = state.edge === 'custom' ? state.edgeColor : (EDGE_COLORS[state.edge] || '#ffffff');
     $('edgeSize').value = state.edgeSize;
-    $('c1').value = state.custom.c1; $('c2').value = state.custom.c2;
-    $('deco').value = state.custom.deco; $('decoColor').value = state.custom.decoColor;
+    syncCustom();
     $('bgDim').value = state.bgDim;
     buildPresets(); buildCounts(); buildLayouts(); buildFonts(); markThemes(); markIconBox(); buildSlots();
   }
@@ -1766,8 +1846,24 @@
   const customChanged = () => { drawThumb('custom'); if (state.outlineMode === 'auto') $('outlineColor').value = THEMES.custom.accent; schedule(); };
   $('c1').addEventListener('input', (e) => { state.custom.c1 = e.target.value; customChanged(); });
   $('c2').addEventListener('input', (e) => { state.custom.c2 = e.target.value; customChanged(); });
-  $('deco').addEventListener('change', (e) => { state.custom.deco = e.target.value; customChanged(); });
+  $('c3').addEventListener('input', (e) => { state.custom.c3 = e.target.value; state.custom.use3 = true; $('use3').checked = true; customChanged(); });
+  $('use3').addEventListener('change', (e) => { state.custom.use3 = e.target.checked; customChanged(); });
   $('decoColor').addEventListener('change', (e) => { state.custom.decoColor = e.target.value; customChanged(); });
+  $('decoDensity').addEventListener('input', (e) => { state.custom.density = +e.target.value; customChanged(); });
+  function buildCustomPanel() {
+    const c = state.custom;
+    chipGroup($('palettes'), PALETTES, p => p.c[0] === c.c1 && p.c[1] === c.c2, p => {
+      Object.assign(c, { c1: p.c[0], c2: p.c[1], c3: p.c[2] || c.c3, use3: !!p.c[2] }); syncCustom(); customChanged();
+    }, (b, p) => { b.style.background = `linear-gradient(120deg, ${p.c.join(', ')})`; });
+    chipGroup($('fadeDirs'), FADE_DIRS, d => (c.dir || 'diag') === d.id, d => { c.dir = d.id; buildCustomPanel(); customChanged(); });
+    chipGroup($('decos'), DECOS, d => c.deco === d.id, d => { c.deco = d.id; buildCustomPanel(); customChanged(); });
+  }
+  function syncCustom() {
+    const c = state.custom;
+    $('c1').value = c.c1; $('c2').value = c.c2; $('c3').value = c.c3 || '#ffd6a5'; $('use3').checked = !!c.use3;
+    $('decoColor').value = c.decoColor; $('decoDensity').value = c.density || 1;
+    buildCustomPanel();
+  }
 
   $('bgFile').addEventListener('change', async (e) => {
     const f = e.target.files && e.target.files[0];
