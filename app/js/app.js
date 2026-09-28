@@ -3136,6 +3136,8 @@
     const has = FACE_THEMES.filter(t => t.id === 'all' || items.some(c => inTheme(themeOf(c.kind, c.id), t.id)));
     let cur = curFaceTheme(); if (!has.some(t => t.id === cur)) cur = 'all';
     chipGroup(el, has, t => t.id === cur, t => { faceTheme.cur = t.id; rebuild(); });
+    const on = el.querySelector('[aria-pressed="true"]');
+    if (on) el.scrollLeft = Math.max(0, on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2);
     return cur;
   }
   function buildStickerTray() {
@@ -3899,7 +3901,7 @@
     const th = themeChips($('camPropThemes'), choices.concat(PBPaint.EFFECTS.map(e => ({ kind: 'paint', id: e.id }))), buildCamProps);
     PBPaint.EFFECTS.filter(e => e.id !== 'none' && inTheme(themeOf('paint', e.id), th)).forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id,
       () => { setPaint(state.facePaint === e.id ? 'none' : e.id); buildCamProps(); }));
-    const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep);
+    if (el.children.length) { const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep); }
     add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
     choices.filter(c => inTheme(themeOf(c.kind, c.id), th)).forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
       state.camProps = hasCamProp(c) ? state.camProps.filter(p => !(p.kind === c.kind && p.id === c.id)) : state.camProps.concat({ kind: c.kind, id: c.id });
