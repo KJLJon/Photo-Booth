@@ -170,6 +170,7 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
   padding: 10px 16px; border-radius: 999px; font-size: .9rem; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 60;
 }
 #toast.show { opacity: 1; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 #updateBar {
   position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 10px); transform: translateX(-50%); z-index: 60;
   display: flex; align-items: center; gap: 10px; background: #2b1740; color: #fff; font-size: .9rem;

@@ -942,7 +942,72 @@
     btn.textContent = missing ? `Add ${missing} more photo${missing === 1 ? '' : 's'} to save` : '💾 Save photo';
     if (typeof updateSummaries === 'function') updateSummaries();
     saveSettings();
+    keepPhotosSoon();
   }
+
+  // ================= keep photos across reloads =================
+  // Photos live in IndexedDB on this device, so closing the app, a crash or an update never loses them.
+  // IndexedDB is shared by every app on the same github.io site, hence the app-specific database name.
+  const PDB = 'birthday-photobooth', PSTORE = 'photos';
+  let pdb = null;
+  function photoDB() {
+    if (!pdb) pdb = new Promise((res, rej) => {
+      const r = indexedDB.open(PDB, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(PSTORE);
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return pdb;
+  }
+  function photoTx(mode, fn) {
+    return photoDB().then(d => new Promise((res, rej) => {
+      const tx = d.transaction(PSTORE, mode), req = fn(tx.objectStore(PSTORE));
+      tx.oncomplete = () => res(req && req.result); tx.onerror = tx.onabort = () => rej(tx.error);
+    }));
+  }
+  const keptSig = [];
+  let keepTimer = 0;
+  function keepPhotosSoon() { clearTimeout(keepTimer); keepTimer = setTimeout(keepPhotos, 600); }
+  async function keepPhotos() {
+    if (!window.indexedDB) return;
+    try {
+      for (let i = 0; i < 4; i++) {
+        const p = state.photos[i];
+        const sig = p ? [p.url, p.zoom, p.cx, p.cy, p.filter].join('|') : '';
+        if (keptSig[i] === sig) continue;
+        keptSig[i] = sig;
+        if (!p) { await photoTx('readwrite', s => s.delete('slot' + i)); continue; }
+        if (!p._blob) p._blob = await new Promise(r => p.canvas.toBlob(r, 'image/jpeg', 0.92));
+        const rec = { blob: p._blob, zoom: p.zoom, cx: p.cx, cy: p.cy, filter: p.filter };
+        await photoTx('readwrite', s => s.put(rec, 'slot' + i));
+      }
+    } catch (e) { /* storage full or blocked (private mode): photos just won't survive a reload */ }
+  }
+  async function restorePhotos() {
+    if (!window.indexedDB) return 0;
+    let n = 0;
+    try {
+      for (let i = 0; i < 4; i++) {
+        const rec = await photoTx('readonly', s => s.get('slot' + i));
+        if (!rec || !rec.blob || state.photos[i]) continue;
+        const bmp = await createImageBitmap(rec.blob);
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d').drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
+        const p = { canvas: c, url: URL.createObjectURL(rec.blob), zoom: rec.zoom || 1, cx: rec.cx, cy: rec.cy, filter: rec.filter || null, _blob: rec.blob };
+        state.photos[i] = p;
+        keptSig[i] = [p.url, p.zoom, p.cx, p.cy, p.filter].join('|');
+        n++;
+      }
+    } catch (e) { /* nothing saved, or storage blocked */ }
+    return n;
+  }
+  $('startOver').addEventListener('click', () => {
+    if (!state.photos.some(Boolean)) { toast('Nothing to clear'); return; }
+    if (!confirm('Remove all photos and start a new strip? (Your design and stickers stay.)')) return;
+    state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
+    state.photos = [null, null, null, null];
+    buildSlots(); schedule();
+  });
+
   let pending = false;
   function schedule() {
     if (pending) return;
@@ -2800,6 +2865,11 @@
   syncUI();
   buildFilterTiles();
   render();
+  restorePhotos().then(n => {
+    if (!n) return;
+    buildSlots(); schedule();
+    toast(`Welcome back! Your ${n === 1 ? 'photo is' : n + ' photos are'} still here 📸`);
+  });
 
   $('boot').remove();
 
@@ -2819,7 +2889,8 @@
     let controlled = !!navigator.serviceWorker.controller;
     let reloading = false;
     const reload = () => { if (!reloading) { reloading = true; location.reload(); } };
-    const busy = () => state.photos.some(Boolean) || OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
+    // photos are kept on the device, so only something open on screen (camera, editor, a video being made) blocks it
+    const busy = () => OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!controlled) { controlled = true; return; }            // first install taking over: nothing to refresh
       if (busy()) $('updateBar').hidden = false; else reload();
