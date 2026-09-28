@@ -2460,7 +2460,8 @@
     set('frames', frame + (state.edge !== 'none' ? ' + border' : ''));
     set('filters', (PBFilters.byId[state.filter] || {}).name || 'Original');
     const nSt = curStickers().length;
-    set('stickers', nSt ? `${nSt} on this layout` : 'None');
+    const paint = paintOn() ? plain((PBPaint.EFFECTS.find(e => e.id === state.facePaint) || {}).label || '') : '';
+    set('stickers', [paint, nSt ? `${nSt} sticker${nSt === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ') || 'None');
   }
 
   // ================= filter picker =================
