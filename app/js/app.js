@@ -591,14 +591,14 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: []
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -1747,11 +1747,15 @@
   // "same face in the same photo" (strips) to following the nearest face frame by frame (videos).
   function drawStickers(ctx, list, W, H, faces, track) {
     (list || []).forEach(st => {
+      let f = null;
       if (st.face && faces) {
-        const f = track ? trackFace(st, faces, track, W, H) : faceFor(st, faces, W, H);
+        f = track ? trackFace(st, faces, track, W, H)
+          : st.face.cam ? faces.find(g => g.slot === st.face.slot && g.idx === st.face.idx) : faceFor(st, faces, W, H);
         if (f) fitToFace(st, f, W, H);
       }
-      drawSticker(ctx, st, W, H);
+      // props picked in the camera only show up on an actual face
+      st._hidden = !!(st.face && st.face.cam && !f);
+      if (!st._hidden) drawSticker(ctx, st, W, H);
     });
   }
 
@@ -1859,7 +1863,11 @@
   function trackFace(st, faces, track, W, H) {
     const prev = track.get(st);
     const ref = prev ? { x: prev.pts.eyes.x, y: prev.pts.eyes.y, d: prev.d } : st.face.home;
-    if (!ref) return null;
+    if (!ref) {                                                // camera props: start on the n-th face from the left
+      const f = faces[st.face.idx || 0];
+      if (f) track.set(st, f);
+      return f || null;
+    }
     let best = null, bd = prev ? 2.5 : 8;
     faces.forEach(f => {
       const dd = Math.hypot((f.pts.eyes.x - ref.x) * W, (f.pts.eyes.y - ref.y) * H) / (ref.d * Math.min(W, H));
@@ -1883,6 +1891,7 @@
   function hitSticker(list, px, py, W, H) {
     for (let i = list.length - 1; i >= 0; i--) {
       const st = list[i], dx = px - st.x * W, dy = py - st.y * H;
+      if (st._hidden) continue;
       const c = Math.cos(-(st.r || 0)), sn = Math.sin(-(st.r || 0));
       const lx = dx * c - dy * sn, ly = dx * sn + dy * c;
       const { hw, hh } = stickerHalf(st, W, H);
@@ -2373,7 +2382,9 @@
     if (cam.slot >= 0 && camMode().kind !== 'photo') cam.mode = 'booth';
     $('camera').hidden = false; $('camReview').hidden = true; $('camError').hidden = true;
     syncScroll();
-    buildCamUI();
+    buildCamUI(); $('camProps').hidden = true; buildCamProps();
+    if (state.camProps.length) PBFace.load();
+    liveStart();
     await startStream();
   }
   async function startStream() {
@@ -2401,7 +2412,7 @@
     cam.stream = null; camVideo.srcObject = null;
   }
   function closeCamera() {
-    cam.cancel = true; stopStream();
+    cam.cancel = true; stopStream(); liveStop();
     $('camera').hidden = true; $('camCount').hidden = true; $('camRec').hidden = true;
     syncScroll();
   }
@@ -2507,11 +2518,14 @@
   }
   $('revUse').addEventListener('click', async () => {
     const n = shotsNeeded(), special = cam.mode === 'glam' || cam.mode === 'comic' ? camFilter() : null;
+    const slots = [];
     for (let k = 0; k < n; k++) {
       const slot = cam.slot >= 0 ? cam.slot : k;
       await setPhotoCanvas(slot, cam.shots[k].canvas);
       if (special && cam.slot >= 0) state.photos[slot].filter = special;
+      slots.push(slot);
     }
+    applyCamProps(slots);
     if (special && cam.slot < 0) {
       state.filter = special;
       if (cam.mode === 'comic') applyComicLook();
@@ -2565,6 +2579,111 @@
   $('camExtra').addEventListener('click', () => { cam.glamBW = !cam.glamBW; buildCamUI(); applyPreview(); });
   $('openCam').addEventListener('click', () => openCamera());
 
+  // ================= live face props in the camera =================
+  // Pick props before the shot and see them on everyone's face in the preview. The captured photos /
+  // video get them as stuck-on stickers (st.face.cam), so they can still be moved or removed later.
+  function faceChoices() {
+    const out = [];
+    PBProps.LIST.forEach(p => { if (PBProps.fit('prop', p.id)) out.push({ kind: 'prop', id: p.id, name: p.name }); });
+    (self.PBStickers || []).forEach(d => { if (d.face) out.push({ kind: 'svg', id: d.id, name: d.name }); });
+    ['🕶️', '👑', '🎩', '🎀', '🥸', '🤡'].forEach(e => out.push({ kind: 'emoji', id: e, name: e }));
+    return out;
+  }
+  const hasCamProp = (c) => state.camProps.some(p => p.kind === c.kind && p.id === c.id);
+  function camSticker(cp, slot, idx) {
+    const fit = stickerFit(cp) || { at: 'eyes', s: 2 };
+    return { kind: cp.kind, id: cp.id, x: .5, y: .4, s: .3, r: 0, flip: false, border: '',
+      face: { at: fit.at, x: fit.x || 0, y: fit.y || 0, s: fit.s, r: 0, slot, idx, cam: true } };
+  }
+  function buildCamProps() {
+    const el = $('camProps'); el.innerHTML = '';
+    const add = (content, title, on, click) => {
+      const b = document.createElement('button'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
+      b.setAttribute('aria-pressed', String(on));
+      if (typeof content === 'string') b.textContent = content; else b.appendChild(content);
+      b.addEventListener('click', click); el.appendChild(b);
+    };
+    add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
+    faceChoices().forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
+      state.camProps = hasCamProp(c) ? state.camProps.filter(p => !(p.kind === c.kind && p.id === c.id)) : state.camProps.concat({ kind: c.kind, id: c.id });
+      saveSettings(); buildCamProps();
+      if (state.camProps.length) PBFace.load();
+    }));
+    $('camPropsBtn').setAttribute('aria-pressed', String(!el.hidden || state.camProps.length > 0));
+  }
+  $('camPropsBtn').addEventListener('click', () => {
+    $('camProps').hidden = !$('camProps').hidden;
+    buildCamProps();
+    if (!$('camProps').hidden) PBFace.load();
+  });
+
+  const live = { raf: 0, poses: [], count: 0 };
+  const camOverlay = $('camOverlay');
+  function liveStart() { if (!live.raf) live.raf = requestAnimationFrame(liveFrame); }
+  function liveStop() { cancelAnimationFrame(live.raf); live.raf = 0; live.poses = []; camOverlay.getContext('2d').clearRect(0, 0, camOverlay.width, camOverlay.height); }
+  function liveFrame() {
+    live.raf = 0;
+    if ($('camera').hidden) return;
+    live.raf = requestAnimationFrame(liveFrame);
+    const dpr = window.devicePixelRatio || 1, cw = camOverlay.clientWidth, ch = camOverlay.clientHeight;
+    if (camOverlay.width !== Math.round(cw * dpr) || camOverlay.height !== Math.round(ch * dpr)) {
+      camOverlay.width = Math.round(cw * dpr); camOverlay.height = Math.round(ch * dpr);
+    }
+    const ctx = camOverlay.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, camOverlay.width, camOverlay.height);
+    const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
+    const wanted = state.camProps.length || !$('camProps').hidden;
+    const hint = state.camProps.length && !PBFace.ready()
+      ? (PBFace.status === 'failed' ? "Face props aren't available on this device" : `⏳ Getting face props ready… ${Math.round(PBFace.progress * 100)}%`)
+      : camHint();
+    if ($('camHint').textContent !== hint) $('camHint').textContent = hint;
+    if (!wanted || !vw || !PBFace.ready() || !$('camReview').hidden) return;
+    const raw = PBFace.detect(camVideo) || [];
+    live.count = raw.length;
+    if (!state.camProps.length) return;
+    // video pixels → screen: the preview is object-fit: cover, and mirrored for the selfie camera
+    const k = Math.max(cw / vw, ch / vh), ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2, mirror = cam.facing === 'user';
+    const map = (q) => ({ x: mirror ? cw - (q.x * k + ox) : q.x * k + ox, y: q.y * k + oy });
+    const poses = raw.map(f => PBFace.pose({ eye1: map(f.eye1), eye2: map(f.eye2), nose: map(f.nose), mouth: map(f.mouth) }))
+      .sort((a, b) => a.pts.eyes.x - b.pts.eyes.x);
+    // smooth against last frame so props don't jitter
+    poses.forEach((p, i) => {
+      const q = live.poses[i];
+      if (!q || Math.hypot(q.pts.eyes.x - p.pts.eyes.x, q.pts.eyes.y - p.pts.eyes.y) > p.d * 1.5) return;
+      const m = (a, b) => a + (b - a) * .55;
+      for (const key in p.pts) p.pts[key] = { x: m(q.pts[key].x, p.pts[key].x), y: m(q.pts[key].y, p.pts[key].y) };
+      let da = p.a - q.a; da = Math.atan2(Math.sin(da), Math.cos(da));
+      p.d = m(q.d, p.d); p.a = q.a + da * .55;
+    });
+    live.poses = poses;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    poses.forEach(p => state.camProps.forEach(cp => {
+      const st = camSticker(cp, 0, 0), F = st.face, A = p.pts[F.at] || p.pts.eyes;
+      const c = Math.cos(p.a), s = Math.sin(p.a), unit = F.s * p.d;
+      ctx.save();
+      ctx.translate(A.x + (F.x * c - F.y * s) * p.d, A.y + (F.x * s + F.y * c) * p.d); ctx.rotate(p.a);
+      const bm = stickerBitmap(st, unit * dpr);
+      if (bm) { const r = unit / bm.q; ctx.drawImage(bm.c, -bm.w * r / 2, -bm.h * r / 2, bm.w * r, bm.h * r); }
+      ctx.restore();
+    }));
+  }
+  // after "Use photos": put the chosen props on every face in the new photos (replacing earlier camera props)
+  async function applyCamProps(slots) {
+    const list = curStickers();
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].face && list[i].face.cam && slots.includes(list[i].face.slot)) list.splice(i, 1);
+    const props = state.camProps.slice();
+    if (!props.length) { schedule(); return; }
+    if (!(await PBFace.load())) return;
+    slots.forEach(i => { const p = state.photos[i]; if (p) p._faces = PBFace.detect(p.canvas) || []; });
+    const L = computeLayout(state.layout, state.count);
+    stripFaces().filter(f => slots.includes(f.slot)).forEach(f => props.forEach(cp => {
+      const st = camSticker(cp, f.slot, f.idx);
+      fitToFace(st, f, L.W, L.H);
+      list.push(st);
+    }));
+    schedule();
+  }
+
   // ================= video modes =================
   function pickMime() {
     if (!window.MediaRecorder) return null;
@@ -2590,6 +2709,10 @@
     }
     setBusy(false);
     cam.last = { mode: m, clip, mirror: cam.facing === 'user' };
+    // props worn in the camera ride along on the video, one set per face that was in view
+    state.vstickers = state.vstickers.filter(st => !(st.face && st.face.cam));
+    for (let k = 0; k < Math.max(1, live.count); k++) state.camProps.forEach(cp => state.vstickers.push(camSticker(cp, 0, k)));
+    saveSettings();
     closeCamera();
     await buildVideo();
   }
