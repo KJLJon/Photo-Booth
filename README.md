@@ -9,10 +9,19 @@ photo things (the strip or collage, saving, printing); Video mode shows only vid
 kind of clip, music, video size and **Record** / **Make video**). The design (background, message,
 filters, stickers) is shared by both. The app remembers which one you used last.
 
+The page runs in the order you'd work: your photos → layout → occasion → background → message →
+icons → frames → filters & looks → face paint, props & stickers → preview (then party mode). A live
+thumbnail of your picture sits next to the save button, so you can see each change without scrolling;
+tap it to jump to the full preview.
+
 **Camera:** 📷 Photo / 🎥 Video tabs switch between photo-booth shots and video modes (boomerang,
 strobe, slow-mo, 360). Zoom by pinching, scrolling or the 1×/2×/3× buttons. Phones that list their
-ultra-wide or telephoto lens also get 0.5× and 2×/3× lens buttons. Pick face props with 😎 and see them
-on everyone's face live. Props and face paint come along onto the photos and videos you take.
+ultra-wide or telephoto lens also get 0.5× and 2×/3× lens buttons. Tap 😎 to pick face props and face
+paint and see them on everyone's face live: **🎨 Face paint** lists every paint, and the holiday chips
+show that holiday's hats, masks and paints. They come along onto the photos and videos you take.
+
+**Sticker studio tabs:** 🎭 Face props (everything that sits on a face, by holiday) · 🎨 Face paint
+(photos) · 🤪 Stickers · 🔤 Text · 😀 Emoji.
 
 **Collages:** switch the photo section to **▦ Collage** to tile 1–9 photos with a white border (or
 any background). Besides grid, big + small, mosaic, columns, center, film and scattered prints there
