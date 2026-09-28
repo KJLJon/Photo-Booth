@@ -19,6 +19,7 @@ const ASSETS = [
   './js/music.js',
   './js/facepaint.js',
   './js/holidays.js',
+  './js/datestamp.js',
   './js/emoji-data.js',
   './js/app.js',
   './stickers/stickers.js'

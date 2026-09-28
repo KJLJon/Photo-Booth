@@ -631,14 +631,14 @@
     bgDim: 0.2, preset: 0,
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
-    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo'
+    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: ''
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -1011,6 +1011,18 @@
     if (!p._sw || p._sw.key !== k) p._sw = { key: k, canvas: composeSwap(src, p._mask) };
     return p._sw.canvas;
   }
+  // ---- the orange 2000s date stamp (js/datestamp.js) ----
+  function stampText() {
+    if (!state.stamp || state.stamp === 'off') return '';
+    const d = state.stampDate ? new Date(state.stampDate + 'T' + new Date().toTimeString().slice(0, 8)) : new Date();
+    return PBStamp.text(state.stamp, isNaN(d) ? new Date() : d);
+  }
+  function buildStampChips() {
+    chipGroup($('stampChips'), PBStamp.STYLES, s => (state.stamp || 'off') === s.id, s => { state.stamp = s.id; buildStampChips(); schedule(); });
+    $('stampDateRow').hidden = !state.stamp || state.stamp === 'off';
+    $('stampDate').value = state.stampDate || '';
+  }
+
   // ---- face paint (js/facepaint.js), placed with the detailed face finder ----
   const paintOn = () => state.facePaint && state.facePaint !== 'none';
   function paintFaces(p, src, key) {
@@ -1036,6 +1048,8 @@
   function buildPaintChips() {
     chipGroup($('paintChips'), PBPaint.EFFECTS, e => (state.facePaint || 'none') === e.id, e => setPaint(e.id));
   }
+  $('stampDate').addEventListener('change', (e) => { state.stampDate = e.target.value; schedule(); });
+  $('stampToday').addEventListener('click', () => { state.stampDate = ''; buildStampChips(); schedule(); });
   function buildSwapChips() {
     chipGroup($('swapChips'), SCENES, s => state.bgSwap === s.id, s => {
       if (s.id === 'custom' && !swapImage) { $('swapFile').click(); return; }
@@ -1122,6 +1136,8 @@
       const c = cropFor(p, ir.w / ir.h);
       const src = photoSource(p), k = src.width / p.canvas.width;
       ctx.drawImage(src, c.sx * k, c.sy * k, c.sw * k, c.sh * k, px, py, ir.w, ir.h);
+      const st = stampText();                                  // in the corner of the part that shows
+      if (st) { ctx.save(); ctx.translate(px, py); PBStamp.draw(ctx, ir.w, ir.h, st); ctx.restore(); }
     } else {
       ctx.fillStyle = '#efe6f7';
       ctx.fillRect(px, py, ir.w, ir.h);
@@ -1827,6 +1843,7 @@
     const cv = document.createElement('canvas'); cv.width = Math.round(c.sw); cv.height = Math.round(c.sh);
     const ctx = cv.getContext('2d');
     ctx.drawImage(src, c.sx * ks, c.sy * ks, c.sw * ks, c.sh * ks, 0, 0, cv.width, cv.height);
+    const stt = stampText(); if (stt) PBStamp.draw(ctx, cv.width, cv.height, stt);
     const list = curStickers();
     if (list.length) {
       ctx.save(); T.toPhoto(ctx, cv.width / c.sw, c.sx, c.sy);
@@ -2137,6 +2154,7 @@
       b.addEventListener('click', () => {
         state.filter = f.id;
         markFilters();
+        if (f.id === 'y2k' && (!state.stamp || state.stamp === 'off')) { state.stamp = 'yymd'; buildStampChips(); toast('📅 Date stamp on — change it under Filters'); }
         if (f.adv) toast('Applying ' + f.name + '…');
         setTimeout(schedule, 30);
       });
@@ -3761,6 +3779,7 @@
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
           if (stage.width !== ow || stage.height !== oh) { stage.width = ow; stage.height = oh; }
           octx.drawImage(frame, 0, 0, ow, oh);
+          const stt = stampText(); if (stt) PBStamp.draw(octx, ow, oh, stt);
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, ow, oh); }
           if (opts.stickers !== false) {
             octx.save(); T.toPhoto(octx, ow / w, 0, 0);
@@ -4099,7 +4118,7 @@
   addSearch($('presets'), '🔍 Search occasions (e.g. july, dad, easter)');
   addSearch($('themes'), '🔍 Search backgrounds');
   addSearch($('filterTiles'), '🔍 Search filters');
-  syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips();
+  syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips(); buildStampChips();
   setTimeout(readDesignLink, 300);
   buildThemes();
   buildEmojis();

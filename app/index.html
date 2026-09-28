@@ -94,6 +94,12 @@
     <div class="body">
       <p class="swipe-hint">Applies to every photo · tap a photo to give just that one its own filter. Swipe for more →</p>
       <div class="tgrid ftiles" id="filterTiles"></div>
+      <h3>📅 Date stamp <span style="font-weight:600">· like a 2000s camera</span></h3>
+      <div class="chips" id="stampChips"></div>
+      <div class="row" id="stampDateRow" hidden style="justify-content:flex-start;align-items:center">
+        <label class="field" style="margin:0">Date <input type="date" id="stampDate"></label>
+        <button type="button" class="linkbtn" id="stampToday">Use today</button>
+      </div>
       <h3>🎨 Face paint</h3>
       <div class="chips hscroll" id="paintChips" style="grid-template-rows:auto"></div>
       <h3>🧍 Background behind people</h3>
@@ -581,6 +587,7 @@
 <script src="js/music.js"></script>
 <script src="js/face.js"></script>
 <script src="js/facepaint.js"></script>
+<script src="js/datestamp.js"></script>
 <script src="js/lib/qrcode.js"></script>
 <script src="js/app.js"></script>
 </body>
