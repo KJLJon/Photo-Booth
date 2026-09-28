@@ -1,41 +1,53 @@
-// Cache names are shared across the whole origin (e.g. every repo on you.github.io),
-// so this app only ever touches caches with its own prefix.
+// Every app on you.github.io shares one origin, so everything here is scoped to this folder:
+// the worker is registered with scope './', and it only ever touches caches with its own prefix.
+// __BUILD__ is replaced with the commit hash on deploy, so each release gets a fresh cache.
 const PREFIX = 'birthday-photobooth-';
-const CACHE = PREFIX + 'v7';
+const CACHE = PREFIX + '__BUILD__';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  './apple-touch-icon.png',
-  './filters.js',
-  './props.js',
-  './encoders.js'
+  './css/app.css',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png',
+  './js/filters.js',
+  './js/props.js',
+  './js/encoders.js',
+  './js/face.js',
+  './js/app.js'
 ];
+// Face-tracking files are large (the WASM runtime is ~11 MB) so they aren't pre-cached;
+// they go in their own cache the first time someone uses face props, and survive app updates
+// (their folder name carries the library version, so a new version is a new URL).
+const VENDOR = PREFIX + 'vendor';
+const SCOPE = new URL('./', self.location).pathname;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))));
 });
+
+self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.skipWaiting(); });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE && k !== VENDOR).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (e) => {
-  const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const req = e.request, url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin || !url.pathname.startsWith(SCOPE)) return;
+  const vendor = url.pathname.startsWith(SCOPE + 'vendor/');
   e.respondWith(
-    caches.open(CACHE).then(async (cache) => {
+    caches.open(vendor ? VENDOR : CACHE).then(async (cache) => {
       const hit = await cache.match(req, { ignoreSearch: true });
       if (hit) return hit;
       try {
         const res = await fetch(req);
-        if (res.ok) cache.put(req, res.clone());
+        if (res.ok && res.type === 'basic') cache.put(req, res.clone());
         return res;
       } catch (err) {
         if (req.mode === 'navigate') return cache.match('./index.html');
