@@ -175,6 +175,11 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .field.slider { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 8px; margin-top: 6px; }
 .opt-search { width: 100%; padding: 9px 14px; border-radius: 999px; border: 2px solid var(--line); font: inherit; font-size: .9rem; margin: 0 0 8px; background: #fff; }
 .opt-search:focus { outline: none; border-color: var(--accent); }
+.chips.seg { justify-content: center; margin-bottom: 8px; }
+.counts-row { display: flex; align-items: center; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.counts-row #countsLabel { font-size: .85rem; font-weight: 700; color: var(--muted); }
+.chips.nums { gap: 5px; }
+.chips.nums .chip { padding: 6px 11px; min-width: 34px; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 #updateBar {
   position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 10px); transform: translateX(-50%); z-index: 60;

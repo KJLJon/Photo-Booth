@@ -31,7 +31,8 @@
 
   <section>
     <h2>📷 Your photos</h2>
-    <div class="chips" id="counts"></div>
+    <div class="chips seg" id="boothMode"></div>
+    <div class="counts-row"><span id="countsLabel" hidden>Photos:</span><div class="chips" id="counts"></div></div>
     <div class="slots" id="slots"></div>
     <div class="row" style="flex-wrap:nowrap">
       <button id="openCam" type="button" class="primary" style="flex:1.2 1 auto;padding:12px 8px">📸 Photos</button>
@@ -201,8 +202,17 @@
   <details class="card" data-key="layout">
     <summary><span>🧩 Layout &amp; style</span><span class="val" id="sum-layout"></span></summary>
     <div class="body">
-    <h3 style="margin-top:0">Layout</h3>
+    <h3 style="margin-top:0">Photo booth layouts</h3>
     <div class="chips" id="layouts"></div>
+    <h3>Collages <span style="font-weight:600">· 1 to 9 photos</span></h3>
+    <div class="chips" id="collages"></div>
+    <div id="collageOpts" hidden>
+      <h3>Collage size</h3>
+      <div class="chips" id="collageSizes"></div>
+      <p class="hint" style="text-align:left" id="collageSizeHint"></p>
+      <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
+      <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
+    </div>
     <h3>Photo style</h3>
     <div class="chips" id="styles"></div>
     <h3>Photo shape</h3>

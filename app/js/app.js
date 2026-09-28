@@ -616,9 +616,11 @@
   const FRAME_COLORS = { white: '#ffffff', black: '#111111', gold: '#d4af37', pink: '#ffc2d9' };
 
   // ================= state =================
+  const MAX_PHOTOS = 9;
+  function noPhotos() { return Array(MAX_PHOTOS).fill(null); }
   const today = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   const state = {
-    photos: [null, null, null, null],
+    photos: noPhotos(),
     count: 3, theme: 'confetti', layout: 'strip', style: 'tilt', shape: 'rect', seed: 20260927,
     line1: 'Happy Birthday!', line2: today, font: 'playful',
     textMode: 'auto', textColor: '#ffffff', outlineMode: 'auto', outlineColor: '#540d6e',
@@ -627,14 +629,15 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none'
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
+    collageSize: 'square', collageGap: .025, caption: false, boothStash: null
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -645,7 +648,9 @@
       if (!PBFilters.byId[state.filter]) state.filter = 'none';
       if (!state.stickerSets || typeof state.stickerSets !== 'object' || Array.isArray(state.stickerSets)) state.stickerSets = {};
       if (!Array.isArray(state.vstickers)) state.vstickers = [];
-      if (!LAYOUTS.some(l => l.id === state.layout)) state.layout = 'strip';
+      if (!LAYOUTS.concat(COLLAGES).some(l => l.id === state.layout)) state.layout = 'strip';
+      state.count = clamp(Math.round(state.count) || 3, 1, MAX_PHOTOS);
+      if (!isCollage() && state.count > 4) state.count = 4;
       if (state.frame === 'none') { state.frame = 'white'; state.frameSize = 0; }
       if (!FONTS[state.font]) state.font = 'playful';
       if (state.theme === 'photo') state.theme = 'confetti'; // background photo isn't stored
@@ -661,6 +666,29 @@
   }
 
   // ================= layout =================
+  // Picture sizes for social media (also used when saving). Ratios are width / height.
+  const SIZES = [
+    { id: 'square', label: '◻️ Square 1:1', hint: 'Instagram & Facebook posts', w: 1080, h: 1080 },
+    { id: 'portrait', label: '▯ Portrait 4:5', hint: 'Instagram feed (tallest it allows)', w: 1080, h: 1350 },
+    { id: 'story', label: '📱 Story 9:16', hint: 'Stories, Reels, TikTok, Snapchat, Shorts', w: 1080, h: 1920 },
+    { id: 'pin', label: '📌 Tall 2:3', hint: 'Pinterest, 4×6 portrait prints', w: 1000, h: 1500 },
+    { id: 'land', label: '▭ Landscape 1.91:1', hint: 'Instagram landscape, Facebook & link previews', w: 1200, h: 628 },
+    { id: 'wide', label: '🖥️ Wide 16:9', hint: 'X/Twitter, YouTube, TVs', w: 1920, h: 1080 },
+    { id: 'print', label: '🖼️ Landscape 3:2', hint: '4×6 landscape prints', w: 1800, h: 1200 }
+  ];
+  const sizeOf = (id) => SIZES.find(z => z.id === id) || SIZES[0];
+
+  const COLLAGES = [
+    { id: 'c-grid', label: '▦ Grid' },
+    { id: 'c-hero', label: '🌟 Big + small' },
+    { id: 'c-mosaic', label: '🧱 Mosaic' },
+    { id: 'c-columns', label: '🏙️ Columns' },
+    { id: 'c-center', label: '🎯 Center' },
+    { id: 'c-film', label: '🎞️ Film' },
+    { id: 'c-scatter', label: '📷 Scattered' }
+  ];
+  const isCollage = (id) => /^c-/.test(id || state.layout);
+
   const LAYOUTS = [
     { id: 'strip', label: '📏 Strip' },
     { id: 'grid', label: '🔲 Collage' },
@@ -693,7 +721,108 @@
 
   // Every layout returns the canvas size, one rect per photo (optional fixed rotation),
   // a base frame thickness, and the caption box.
+  // Collages: photos tiled on a canvas of a social-media size, with even white gaps (or any background).
+  // Cells are laid out in a unit box first, then scaled into the picture.
+  function rowsFor(n, tall) {
+    const T = { 1: [1], 2: [2], 3: [3], 4: [2, 2], 5: [2, 3], 6: [3, 3], 7: [2, 3, 2], 8: [3, 2, 3], 9: [3, 3, 3] };
+    const TALL = { 1: [1], 2: [1, 1], 3: [1, 1, 1], 4: [2, 2], 5: [2, 1, 2], 6: [2, 2, 2], 7: [2, 3, 2], 8: [2, 2, 2, 2], 9: [3, 3, 3] };
+    return (tall ? TALL : T)[n];
+  }
+  function cellsFor(kind, n, ar) {            // ar = box width / height
+    const tall = ar < .8, wide = ar > 1.35, out = [];
+    const rowsLayout = (counts, rowWeights, cellWeights) => {
+      const rw = rowWeights || counts.map(() => 1), tot = rw.reduce((a, b) => a + b, 0);
+      let y = 0, k = 0;
+      counts.forEach((c, i) => {
+        const h = rw[i] / tot, ws = (cellWeights && cellWeights(i, c)) || Array(c).fill(1), wt = ws.reduce((a, b) => a + b, 0);
+        let x = 0;
+        for (let j = 0; j < c; j++) { out.push({ x, y, w: ws[j] / wt, h }); x += ws[j] / wt; k++; }
+        y += h;
+      });
+    };
+    const colsLayout = (counts, cellWeights) => {
+      let x = 0;
+      counts.forEach((c, i) => {
+        const w = 1 / counts.length, hs = (cellWeights && cellWeights(i, c)) || Array(c).fill(1), ht = hs.reduce((a, b) => a + b, 0);
+        let y = 0;
+        for (let j = 0; j < c; j++) { out.push({ x, y, w, h: hs[j] / ht }); y += hs[j] / ht; }
+        x += w;
+      });
+    };
+    if (n === 1) return [{ x: 0, y: 0, w: 1, h: 1 }];
+    switch (kind) {
+      case 'c-hero': {
+        const rest = n - 1;
+        if (wide) {                               // big one on the left, the rest in a grid on the right
+          const cols = rest > 4 ? 2 : 1, per = Math.ceil(rest / cols);
+          out.push({ x: 0, y: 0, w: .6, h: 1 });
+          for (let i = 0; i < rest; i++) { const c = Math.floor(i / per), r = i % per, inCol = Math.min(per, rest - c * per); out.push({ x: .6 + c * .4 / cols, y: r / inCol, w: .4 / cols, h: 1 / inCol }); }
+        } else {
+          const rows = rest > 4 ? [Math.ceil(rest / 2), Math.floor(rest / 2)] : [rest];
+          out.push({ x: 0, y: 0, w: 1, h: rows.length > 1 ? .56 : .66 });
+          const top = out[0].h, rh = (1 - top) / rows.length;
+          rows.forEach((c, i) => { for (let j = 0; j < c; j++) out.push({ x: j / c, y: top + i * rh, w: 1 / c, h: rh }); });
+        }
+        return out;
+      }
+      case 'c-mosaic':
+        rowsLayout(rowsFor(n, tall), rowsFor(n, tall).map((_, i) => (i % 2 ? .8 : 1.2)),
+          (i, c) => Array.from({ length: c }, (_, j) => ((i + j) % 2 ? 1 : 1.7)));
+        return out;
+      case 'c-columns': {
+        const counts = rowsFor(n, !tall);         // columns of stacked photos, staggered heights
+        colsLayout(counts, (i, c) => Array.from({ length: c }, (_, j) => ((i + j) % 2 ? 1.35 : 1)));
+        return out;
+      }
+      case 'c-center': {
+        if (n < 3) break;
+        const rest = n - 1, left = Math.ceil(rest / 2), right = rest - left, side = .25;
+        out.push({ x: side, y: 0, w: 1 - 2 * side, h: 1 });
+        for (let i = 0; i < left; i++) out.push({ x: 0, y: i / left, w: side, h: 1 / left });
+        for (let i = 0; i < right; i++) out.push({ x: 1 - side, y: i / right, w: side, h: 1 / right });
+        return out;
+      }
+      case 'c-film': {                              // one line of photos, the way the canvas is longest
+        for (let i = 0; i < n; i++) out.push(ar >= 1 ? { x: i / n, y: 0, w: 1 / n, h: 1 } : { x: 0, y: i / n, w: 1, h: 1 / n });
+        return out;
+      }
+      case 'c-scatter': {
+        const r = mulberry32(state.seed + n), cols = Math.ceil(Math.sqrt(n * ar)), rows = Math.ceil(n / cols);
+        for (let i = 0; i < n; i++) {
+          const c = i % cols, rr = Math.floor(i / cols), cw = 1 / cols, ch = 1 / rows;
+          // slightly overlapping prints, kept inside the canvas
+          const w = cw * 1.08, h = ch * 1.08;
+          out.push({ x: clamp(c * cw - cw * .04 + (r() - .5) * cw * .1, .02, 1 - w - .02), y: clamp(rr * ch - ch * .04 + (r() - .5) * ch * .1, .02, 1 - h - .02),
+            w: w * .96, h: h * .96, rot: (r() - .5) * 12 });
+        }
+        return out;
+      }
+    }
+    rowsLayout(rowsFor(n, tall));
+    return out;
+  }
+  function collageLayout(kind, n) {
+    const Z = sizeOf(state.collageSize), k = 1800 / Math.max(Z.w, Z.h);
+    const W = Math.round(Z.w * k), H = Math.round(Z.h * k), m = Math.min(W, H);
+    const gap = m * (state.collageGap == null ? .025 : state.collageGap), cap = state.caption ? Math.round(H * (H > W ? .14 : .2)) : 0;
+    const box = { x: gap, y: gap, w: W - 2 * gap, h: H - 2 * gap - cap };
+    const scatter = kind === 'c-scatter';
+    // cells touching the edge keep the full outer margin; shared edges get half a gap each side
+    const rects = cellsFor(kind, n, box.w / box.h).map(c => {
+      let x0 = box.x + c.x * box.w, y0 = box.y + c.y * box.h, x1 = x0 + c.w * box.w, y1 = y0 + c.h * box.h;
+      if (!scatter) {
+        if (x0 > box.x + .5) x0 += gap / 2;
+        if (y0 > box.y + .5) y0 += gap / 2;
+        if (x1 < box.x + box.w - .5) x1 -= gap / 2;
+        if (y1 < box.y + box.h - .5) y1 -= gap / 2;
+      }
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, rot: c.rot };
+    });
+    return { W, H, rects, border: m * .012, cap: cap ? { x: 0, y: H - cap - gap / 2, w: W, h: cap } : null, collage: true };
+  }
+
   function computeLayout(kind, n) {
+    if (isCollage(kind)) return collageLayout(kind, n);
     if (kind === 'grid') {
       const W = 1600, m = 90, gap = 60, top = 90, cap = 400;
       const p = (W - 2 * m - gap) / 2;
@@ -1067,6 +1196,7 @@
   }
 
   function drawCaption(ctx, L, theme) {
+    if (!L.cap) return;
     const F = FONTS[state.font] || FONTS.playful;
     const fill = state.textMode === 'custom' ? state.textColor : (theme.text || '#ffffff');
     const outline = state.outlineMode === 'none' ? null : state.outlineMode === 'custom' ? state.outlineColor : theme.accent;
@@ -1150,7 +1280,7 @@
   async function keepPhotos() {
     if (!window.indexedDB) return;
     try {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < MAX_PHOTOS; i++) {
         const p = state.photos[i];
         const sig = p ? [p.url, p.zoom, p.cx, p.cy, p.filter].join('|') : '';
         if (keptSig[i] === sig) continue;
@@ -1166,7 +1296,7 @@
     if (!window.indexedDB) return 0;
     let n = 0;
     try {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < MAX_PHOTOS; i++) {
         const rec = await photoTx('readonly', s => s.get('slot' + i));
         if (!rec || !rec.blob || state.photos[i]) continue;
         const bmp = await createImageBitmap(rec.blob);
@@ -1184,7 +1314,7 @@
     if (!state.photos.some(Boolean)) { toast('Nothing to clear'); return; }
     if (!confirm('Remove all photos and start a new strip? (Your design and stickers stay.)')) return;
     state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
-    state.photos = [null, null, null, null];
+    state.photos = noPhotos();
     buildSlots(); schedule();
   });
 
@@ -1345,7 +1475,7 @@
     const full = state.photos.slice(0, n).every(Boolean);
     $('multiLabel').textContent = full ? 'Replace' : 'Upload';
     queueFilterThumbs();
-    slotsEl.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+    slotsEl.style.gridTemplateColumns = `repeat(${n <= 4 ? n : n === 9 ? 3 : Math.ceil(n / 2)}, 1fr)`;
     state.photos.slice(0, n).forEach((p, i) => {
       const el = document.createElement('button');
       el.type = 'button';
@@ -1422,15 +1552,50 @@
   $('photoMenu').addEventListener('click', (e) => { if (e.target.id === 'photoMenu') closePhotoMenu(); });
 
   function buildCounts() {
-    chipGroup($('counts'), [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }], it => state.count === it.n, it => {
+    const col = isCollage();
+    chipGroup($('boothMode'), [{ id: false, label: '🎞️ Photo booth' }, { id: true, label: '▦ Collage' }], m => col === m.id,
+      m => selectLayout(m.id ? (state.lastCollage || 'c-grid') : (state.lastBooth || 'strip')));
+    const opts = col ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ label: String(n), n })) : [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }];
+    chipGroup($('counts'), opts, it => state.count === it.n, it => {
       state.count = it.n; buildCounts(); buildSlots(); schedule();
     });
+    $('counts').classList.toggle('nums', col);
+    $('countsLabel').hidden = !col;
+  }
+  // Switching between photo-booth layouts and collages: collages start clean (white, straight, no frame,
+  // no message) and the booth look comes back when you switch back.
+  const STASH_KEYS = ['theme', 'style', 'shape', 'frameSize', 'shadow'];
+  function selectLayout(id) {
+    const was = isCollage(), now = isCollage(id);
+    if (!was && now) {
+      state.boothStash = {}; STASH_KEYS.forEach(k => { state.boothStash[k] = state[k]; });
+      Object.assign(state, { theme: 'minwhite', style: 'straight', shape: 'rect', frameSize: 0, shadow: false });
+      const filled = state.photos.filter(Boolean).length;
+      if (filled > state.count) state.count = Math.min(MAX_PHOTOS, filled);
+    } else if (was && !now) {
+      if (state.boothStash) Object.assign(state, state.boothStash);
+      state.count = clamp(state.count, 3, 4);
+    }
+    // the scattered collage looks like a pile of prints: white borders and shadows
+    if (now && id === 'c-scatter' && state.layout !== 'c-scatter') Object.assign(state, { frame: 'white', frameSize: 1.4, shadow: true });
+    else if (now && id !== 'c-scatter' && state.layout === 'c-scatter') Object.assign(state, { frameSize: 0, shadow: false });
+    state.layout = id;
+    if (now) state.lastCollage = id; else state.lastBooth = id;
+    markThemes(); syncUI(); schedule();
   }
   function buildLayouts() {
-    chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => { state.layout = it.id; buildLayouts(); schedule(); });
+    chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => selectLayout(it.id));
+    chipGroup($('collages'), COLLAGES, it => state.layout === it.id, it => selectLayout(it.id));
+    $('collageOpts').hidden = !isCollage();
+    chipGroup($('collageSizes'), SIZES, z => state.collageSize === z.id, z => { state.collageSize = z.id; buildLayouts(); schedule(); });
+    [...$('collageSizes').children].forEach((b, i) => { b.title = SIZES[i].hint; });
+    $('collageSizeHint').textContent = sizeOf(state.collageSize).hint + ` · ${sizeOf(state.collageSize).w}×${sizeOf(state.collageSize).h}`;
+    $('collageGap').value = state.collageGap; $('collageCaption').checked = !!state.caption;
     chipGroup($('styles'), STYLES, it => state.style === it.id, it => { state.style = it.id; buildLayouts(); schedule(); });
     chipGroup($('shapes'), SHAPES, it => state.shape === it.id, it => { state.shape = it.id; buildLayouts(); schedule(); });
   }
+  $('collageGap').addEventListener('input', (e) => { state.collageGap = +e.target.value; schedule(); });
+  $('collageCaption').addEventListener('change', (e) => { state.caption = e.target.checked; schedule(); });
   function buildFonts() {
     chipGroup($('fonts'), Object.entries(FONTS).map(([id, f]) => ({ ...f, id })), it => state.font === it.id, it => {
       state.font = it.id; buildFonts(); schedule();
@@ -1897,7 +2062,8 @@
     set('background', THEMES[state.theme].name);
     set('message', state.line1.trim() || state.line2.trim() || 'No text');
     set('icons', (state.iconLeft || state.iconRight) ? `${state.iconLeft || '–'}  ${state.iconRight || '–'}` : 'None');
-    set('layout', `${plain(labelOf(LAYOUTS, state.layout))} · ${plain(labelOf(STYLES, state.style))}`);
+    set('layout', isCollage() ? `Collage · ${plain(labelOf(COLLAGES, state.layout))} · ${plain(labelOf(SIZES, state.collageSize))}`
+      : `${plain(labelOf(LAYOUTS, state.layout))} · ${plain(labelOf(STYLES, state.style))}`);
     const frame = state.frameSize <= 0 ? 'No frame' : `${state.frame === 'custom' ? 'Custom' : state.frame[0].toUpperCase() + state.frame.slice(1)} frame`;
     set('frames', frame + (state.edge !== 'none' ? ' + border' : ''));
     set('filters', (PBFilters.byId[state.filter] || {}).name || 'Original');
@@ -3145,7 +3311,7 @@
   }
   function partyShoot() {
     // guests' photos never mix with the next group's
-    state.photos = [null, null, null, null];
+    state.photos = noPhotos();
     cam.party = true; cam.timer = cam.timer || 3;
     $('camera').classList.add('party');
     openCamera({ mode: 'booth' }).then(() => { if (party.on && cam.stream) $('camShutter').click(); });
@@ -3171,7 +3337,7 @@
     clearInterval(party.idle);
     if ($('partyImg').src) URL.revokeObjectURL($('partyImg').src);
     state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
-    state.photos = [null, null, null, null]; buildSlots(); schedule();
+    state.photos = noPhotos(); buildSlots(); schedule();
     partyAttract();
   }
   $('partyResult').addEventListener('pointerdown', () => { party.left = 45; });
