@@ -290,8 +290,19 @@
     }
   }
 
+  // Brightness / contrast / colour sliders, each -1…1 (0 = unchanged).
+  const hasAdj = (a) => !!a && (a.b || a.c || a.s);
+  function adjust(d, a) {
+    const bo = (a.b || 0) * 90, cf = Math.pow(2, (a.c || 0) * 1.3), sf = 1 + (a.s || 0);
+    for (let i = 0; i < d.length; i += 4) {
+      let r = d[i], g = d[i + 1], b = d[i + 2];
+      if (sf !== 1) { const l = .299 * r + .587 * g + .114 * b; r = l + (r - l) * sf; g = l + (g - l) * sf; b = l + (b - l) * sf; }
+      d[i] = (r - 128) * cf + 128 + bo; d[i + 1] = (g - 128) * cf + 128 + bo; d[i + 2] = (b - 128) * cf + 128 + bo;
+    }
+  }
+
   // Returns a new canvas with the filter applied (advanced filters work on a smaller copy for speed).
-  function apply(src, id, maxSize) {
+  function apply(src, id, maxSize, adj) {
     const heavy = byId[id] && (byId[id].adv || id === 'glam' || id === 'glambw' || id === 'dreamy');
     const max = maxSize || (heavy ? 1200 : 1800);
     const s = Math.min(1, max / Math.max(src.width, src.height));
@@ -300,28 +311,35 @@
     c.width = w; c.height = h;
     const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(src, 0, 0, w, h);
-    if (!id || id === 'none' || !byId[id]) return c;
+    const f = id && id !== 'none' && byId[id];
+    if (!f && !hasAdj(adj)) return c;
     const img = ctx.getImageData(0, 0, w, h);
-    run(img.data, w, h, id);
+    if (f) run(img.data, w, h, id);
+    if (hasAdj(adj)) adjust(img.data, adj);
     ctx.putImageData(img, 0, 0);
     return c;
   }
 
   // In-place, fast enough for live video frames (simple filters only; others fall back to CSS look-alikes).
-  function applyFrame(ctx, w, h, id) {
-    if (!id || id === 'none') return;
-    if (byId[id] && (byId[id].adv || id === 'glam' || id === 'glambw' || id === 'dreamy')) {
-      if (!('filter' in ctx)) return;
-      const c = ctx.canvas, tmp = applyFrame._tmp || (applyFrame._tmp = document.createElement('canvas'));
-      tmp.width = w; tmp.height = h;
-      const t = tmp.getContext('2d'); t.drawImage(c, 0, 0);
-      ctx.save(); ctx.filter = CSS[id] || 'none'; ctx.drawImage(tmp, 0, 0); ctx.restore();
-      return;
+  function applyFrame(ctx, w, h, id, adj) {
+    if (id && id !== 'none' && byId[id] && (byId[id].adv || id === 'glam' || id === 'glambw' || id === 'dreamy')) {
+      if ('filter' in ctx) {
+        const c = ctx.canvas, tmp = applyFrame._tmp || (applyFrame._tmp = document.createElement('canvas'));
+        tmp.width = w; tmp.height = h;
+        const t = tmp.getContext('2d'); t.drawImage(c, 0, 0);
+        ctx.save(); ctx.filter = CSS[id] || 'none'; ctx.drawImage(tmp, 0, 0); ctx.restore();
+      }
+      id = null;
     }
+    const simpleF = id && id !== 'none';
+    if (!simpleF && !hasAdj(adj)) return;
     const img = ctx.getImageData(0, 0, w, h);
-    simple(img.data, w, h, id);
+    if (simpleF) simple(img.data, w, h, id);
+    if (hasAdj(adj)) adjust(img.data, adj);
     ctx.putImageData(img, 0, 0);
   }
+  // the same sliders as a CSS filter, for the live camera preview
+  const adjCss = (a) => !hasAdj(a) ? '' : `brightness(${1 + (a.b || 0) * .45}) contrast(${Math.pow(2, (a.c || 0) * 1.3)}) saturate(${1 + (a.s || 0)})`;
 
-  window.PBFilters = { LIST, byId, css: (id) => CSS[id] || '', apply, applyFrame };
+  window.PBFilters = { LIST, byId, css: (id) => CSS[id] || '', apply, applyFrame, hasAdj, adjCss };
 })();

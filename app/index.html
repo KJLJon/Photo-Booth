@@ -63,6 +63,10 @@
     <div class="body">
       <p class="swipe-hint">Applies to every photo · tap a photo to give just that one its own filter. Swipe for more →</p>
       <div class="tgrid ftiles" id="filterTiles"></div>
+      <h3>Adjust <button type="button" class="linkbtn" id="adjReset" style="float:right;font-size:.8rem">Reset</button></h3>
+      <label class="field slider">☀️ Brightness <input type="range" id="adj-b" min="-1" max="1" step="0.05" value="0"></label>
+      <label class="field slider">◐ Contrast <input type="range" id="adj-c" min="-1" max="1" step="0.05" value="0"></label>
+      <label class="field slider">🎨 Color <input type="range" id="adj-s" min="-1" max="1" step="0.05" value="0"></label>
     </div>
   </details>
 
@@ -83,6 +87,10 @@
     <div class="body">
     <p class="swipe-hint">Sets the background, message, icons and font — change anything after. Swipe for more →</p>
     <div class="chips hscroll" id="presets"></div>
+    <h3>⭐ My designs</h3>
+    <div class="chips" id="designs"></div>
+    <div class="btnrow" style="margin-top:8px"><button type="button" id="designSave">＋ Save this design</button></div>
+    <p class="hint" style="text-align:left">Saves the background, message, layout, frames, filters and stickers (not the photos) on this device.</p>
     </div>
   </details>
   <details class="card" data-key="background">
@@ -419,6 +427,7 @@
     <div class="st-cats" id="stCats" hidden>
       <input type="search" id="stSearch" placeholder="Search emoji" autocomplete="off" enterkeyhint="search">
       <div class="chips" id="stCatChips"></div>
+      <div class="chips tones" id="stTones"></div>
     </div>
     <div class="st-items" id="stItems"></div>
   </div>
@@ -434,6 +443,7 @@
     <div class="row">
       <a class="btn primary" id="dlBtn" href="#" download>⬇️ Save to device</a>
       <button id="shareBtn" type="button">📤 Share</button>
+      <button id="printBtn" type="button">🖨️ Print</button>
     </div>
     <button id="sheetClose" type="button">Close</button>
   </div>

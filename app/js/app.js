@@ -591,14 +591,14 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: []
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: ''
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -739,9 +739,9 @@
   // the filtered copy is cached on the photo so each filter is only computed once
   function photoSource(p) {
     if (p.raw) return p.canvas;
-    const id = p.filter || state.filter;
-    if (!id || id === 'none') return p.canvas;
-    if (!p._f || p._f.id !== id) p._f = { id, canvas: PBFilters.apply(p.canvas, id) };
+    const id = p.filter || state.filter, adj = state.adj, key = id + '|' + JSON.stringify(adj);
+    if ((!id || id === 'none') && !PBFilters.hasAdj(adj)) return p.canvas;
+    if (!p._f || p._f.key !== key) p._f = { key, canvas: PBFilters.apply(p.canvas, id, null, adj) };
     return p._f.canvas;
   }
 
@@ -1070,6 +1070,44 @@
     });
   }
 
+  // ---- brightness / contrast / colour ----
+  ['b', 'c', 's'].forEach(k => $('adj-' + k).addEventListener('input', (e) => {
+    state.adj = { ...state.adj, [k]: +e.target.value }; schedule();
+  }));
+  $('adjReset').addEventListener('click', () => { state.adj = { b: 0, c: 0, s: 0 }; syncAdj(); schedule(); });
+  function syncAdj() { ['b', 'c', 's'].forEach(k => { $('adj-' + k).value = (state.adj && state.adj[k]) || 0; }); }
+
+  // ---- my designs: everything except the photos, saved on this device ----
+  const DESIGNS_KEY = 'photobooth-designs-v1';
+  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone'].includes(k)).concat('camProps');
+  function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
+  function applyDesign(d) {
+    DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
+    if (!THEMES[state.theme] || state.theme === 'photo') state.theme = 'confetti';
+    syncUI(); syncAdj(); markFilters(); buildSlots(); schedule();
+  }
+  function loadDesigns() { try { return JSON.parse(localStorage.getItem(DESIGNS_KEY) || '[]'); } catch (e) { return []; } }
+  function storeDesigns(list) { try { localStorage.setItem(DESIGNS_KEY, JSON.stringify(list)); return true; } catch (e) { toast('Not enough space to save designs'); return false; } }
+  function buildDesigns() {
+    const el = $('designs'), list = loadDesigns(); el.innerHTML = '';
+    list.forEach((d, i) => {
+      const wrap = document.createElement('span'); wrap.className = 'design-chip';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = '⭐ ' + d.name;
+      b.addEventListener('click', () => { applyDesign(d.d); toast(`“${d.name}” applied`); });
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '✕';
+      x.setAttribute('aria-label', 'Delete ' + d.name);
+      x.addEventListener('click', () => { if (!confirm(`Delete the design “${d.name}”?`)) return; list.splice(i, 1); storeDesigns(list); buildDesigns(); });
+      wrap.append(b, x); el.appendChild(wrap);
+    });
+  }
+  $('designSave').addEventListener('click', () => {
+    const name = askText('Name this design:', state.line1 || 'My design', 30);
+    if (!name) return;
+    const list = loadDesigns().filter(d => d.name !== name);
+    list.unshift({ name, at: Date.now(), d: designOf() });
+    if (storeDesigns(list.slice(0, 20))) { buildDesigns(); toast('⭐ Design saved'); }
+  });
+
   const slotsEl = $('slots');
   function buildSlots() {
     slotsEl.innerHTML = '';
@@ -1358,6 +1396,7 @@
   }
   let sheetFile = null, sheetUrl = null;
   function showSaveSheet(blob, name, title, hint, modes) {
+    $('printBtn').hidden = !/^image\/(jpeg|png)$/.test(blob.type) || /gif|anim/i.test(name);
     $('saveModes').hidden = !modes; if (!modes) $('savePicks').hidden = true;
     $('shareBtn').textContent = '📤 Share';
     if (sheetUrl) URL.revokeObjectURL(sheetUrl);
@@ -1399,6 +1438,25 @@
     return cv;
   }
   const toJpeg = (cv) => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
+  // A 4×6 photo print at 300 dpi. A strip is printed twice side by side (cut down the middle), like a
+  // real photo booth; other layouts are centred on the sheet in whichever way round fits best.
+  function composePrint(src) {
+    const strip = state.layout === 'strip', land = !strip && src.width > src.height;
+    const W = land ? 1800 : 1200, H = land ? 1200 : 1800;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    const fit = (x, y, w, h) => {
+      const k = Math.min(w / src.width, h / src.height), dw = src.width * k, dh = src.height * k;
+      ctx.drawImage(src, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+    };
+    if (strip) {
+      fit(24, 24, W / 2 - 48, H - 48); fit(W / 2 + 24, 24, W / 2 - 48, H - 48);
+      ctx.strokeStyle = '#ccc'; ctx.setLineDash([12, 12]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+    } else fit(36, 36, W - 72, H - 72);
+    return cv;
+  }
   const save = { mode: 'booth', pick: 0, strip: null, photos: [] };
   async function buildSaveSheet() {
     const name = `photobooth-${save.stamp}`;
@@ -1406,6 +1464,11 @@
       if (!save.strip) { render(); save.strip = await toJpeg(canvas); }
       if (!save.strip) { toast('Could not create the image'); return; }
       showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
+    } else if (save.mode === 'print') {
+      if (!save.print) { render(); save.print = await toJpeg(composePrint(canvas)); }
+      showSaveSheet(save.print, `${name}-4x6.jpg`, 'Ready to print 🖨️',
+        (state.layout === 'strip' ? 'Two strips on one 4×6 photo — cut down the middle. ' : '') +
+        'Print at 4×6 in (10×15 cm), "fit to page" off, on a printer or at a photo kiosk.', true);
     } else {
       const idx = filledIdx();
       if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(composePhotoOnly(i))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
@@ -1425,13 +1488,14 @@
       b.appendChild(im); b.addEventListener('click', () => { save.pick = k; buildSaveSheet(); });
       picks.appendChild(b);
     });
-    chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Booth design' }, { id: 'photos', label: '📷 Just the photos' }],
+    chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Design' }, { id: 'photos', label: '📷 Photos' }, { id: 'print', label: '🖨️ 4×6 print' }],
       m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
   }
   $('save').addEventListener('click', () => {
-    Object.assign(save, { strip: null, photos: [], pick: 0, stamp: stamp() });
+    Object.assign(save, { strip: null, print: null, photos: [], pick: 0, stamp: stamp() });
     buildSaveSheet();
   });
+  $('printBtn').addEventListener('click', () => printImage(sheetFile));
   $('dlBtn').addEventListener('click', () => { if (!isIOS && sheetFile) setTimeout(() => toast('Saved ' + sheetFile.name), 300); });
   $('shareBtn').addEventListener('click', async () => {
     if (!sheetFile) return;
@@ -2186,12 +2250,23 @@
   let emojiCat = 0, emojiQuery = '';
   function emojiList() {
     const D = window.PBEmojiData || [];
-    const split = (g) => g.list.split('\t').map(x => { const i = x.indexOf(' '); return { e: x.slice(0, i), n: x.slice(i + 1) }; });
+    const split = (g) => g.list.split('\t').map(x => {
+      const tone = x[0] === '~', y = tone ? x.slice(1) : x, i = y.indexOf(' ');
+      return { e: tone ? withTone(y.slice(0, i)) : y.slice(0, i), n: y.slice(i + 1) };
+    });
     if (emojiQuery) {
       const q = emojiQuery.toLowerCase();
       return D.flatMap(split).filter(x => x.n.includes(q)).slice(0, 300);
     }
     return D[emojiCat] ? split(D[emojiCat]) : PBProps.EMOJI.map(e => ({ e, n: '' }));
+  }
+  // skin tone: the modifier goes right after the first character (replacing an emoji-style selector)
+  const TONES = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'];
+  function withTone(e) {
+    if (!state.tone) return e;
+    const cps = [...e];
+    const rest = cps.slice(1); if (rest[0] === '\uFE0F') rest.shift();
+    return cps[0] + state.tone + rest.join('');
   }
   function buildStickerTray() {
     chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; buildStickerTray(); });
@@ -2217,6 +2292,9 @@
       PBProps.WORDS.burst.forEach(t => add(propIcon('burst', t), () => addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 })));
     } else {
       const D = window.PBEmojiData || [];
+      chipGroup($('stTones'), TONES.map(t => ({ t, label: '✋' + t })), o => (state.tone || '') === o.t,
+        o => { state.tone = o.t; saveSettings(); buildStickerTray(); });
+      [...$('stTones').children].forEach((b, i) => b.setAttribute('aria-label', ['Default skin tone', 'Light', 'Medium-light', 'Medium', 'Medium-dark', 'Dark'][i]));
       chipGroup($('stCatChips'), D.map((g, i) => ({ i, label: g.icon, title: g.name })), g => !emojiQuery && emojiCat === g.i,
         g => { emojiCat = g.i; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
       [...$('stCatChips').children].forEach((b, i) => { if (D[i]) { b.title = D[i].name; b.setAttribute('aria-label', D[i].name); } });
@@ -2374,7 +2452,7 @@
   }
   function applyPreview() {
     camVideo.style.transform = cam.facing === 'user' ? 'scaleX(-1)' : 'none';
-    camVideo.style.filter = PBFilters.css(camFilter()) || 'none';
+    camVideo.style.filter = [PBFilters.css(camFilter()), PBFilters.adjCss(state.adj)].join(' ').trim() || 'none';
   }
 
   async function openCamera(opts = {}) {
@@ -2936,7 +3014,7 @@
           raw = !(src instanceof HTMLVideoElement) && faceCache.get(src);
           if (!raw) { raw = PBFace.detect(frame) || []; if (!(src instanceof HTMLVideoElement)) faceCache.set(src, raw); }
         }
-        PBFilters.applyFrame(fctx, w, h, state.filter);
+        PBFilters.applyFrame(fctx, w, h, state.filter, state.adj);
         if (plain) {
           const T = photoXform(holder, L.rects[0], jit, L.border);
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
@@ -3164,6 +3242,7 @@
   // ================= start =================
   PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); });
   loadSettings();
+  syncAdj(); buildDesigns();
   buildThemes();
   buildEmojis();
   syncUI();

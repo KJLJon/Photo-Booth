@@ -12,7 +12,9 @@ const ICONS = { 'Smileys & Emotion': '😀', 'People & Body': '👋', 'Animals &
 const out = groups.map(g => ({
   name: g.name, icon: ICONS[g.name] || g.emojis[0].emoji,
   // "emoji name" pairs joined with tabs keeps the file small
-  list: g.emojis.filter(e => parseFloat(e.emoji_version) <= MAX_VERSION).map(e => e.emoji + ' ' + e.name).join('\t')
+  // a leading "~" marks emoji that come in skin tones
+  list: g.emojis.filter(e => parseFloat(e.emoji_version) <= MAX_VERSION)
+    .map(e => (e.skin_tone_support ? '~' : '') + e.emoji + ' ' + e.name).join('\t')
 }));
 const total = out.reduce((n, g) => n + g.list.split('\t').length, 0);
 fs.writeFileSync(new URL('../app/js/emoji-data.js', import.meta.url),
