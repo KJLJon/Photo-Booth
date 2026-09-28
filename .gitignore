@@ -2,3 +2,6 @@ app/vendor/
 node_modules/
 .DS_Store
 scratch/
+# keep stray test images out of the published folder
+app/*.png
+app/*.jpg
