@@ -1208,6 +1208,37 @@
       wrap.append(b, x); el.appendChild(wrap);
     });
   }
+  // ---- design links: the design (no photos) packed into the address after "#d=" ----
+  const b64u = (bytes) => { let s = ''; bytes.forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  async function pipe(bytes, Stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new Stream('deflate-raw'))).arrayBuffer()); }
+  async function designLink() {
+    const d = designOf(), k = state.layout + state.count;
+    d.stickerSets = { [k]: JSON.parse(JSON.stringify(curStickers())) };   // just this layout's stickers
+    d.stickerSets[k].forEach(st => { delete st._hidden; });
+    const json = new TextEncoder().encode(JSON.stringify(d));
+    const packed = window.CompressionStream ? 'z' + b64u(await pipe(json, CompressionStream)) : 'j' + b64u(json);
+    return location.href.split('#')[0] + '#d=' + packed;
+  }
+  async function readDesignLink() {
+    const m = /[#&]d=([zj])([\w-]+)/.exec(location.hash);
+    if (!m) return;
+    history.replaceState(null, '', location.href.split('#')[0]);
+    try {
+      const bytes = unb64u(m[2]);
+      const d = JSON.parse(new TextDecoder().decode(m[1] === 'z' ? await pipe(bytes, DecompressionStream) : bytes));
+      if (!confirm(`Use the design that was shared with you?${d.line1 ? `\n“${d.line1}”` : ''}\n(Your photos stay; save your current design first if you want to keep it.)`)) return;
+      applyDesign(d); toast('🎨 Shared design applied');
+    } catch (e) { toast("That design link didn't work"); }
+  }
+  $('designShare').addEventListener('click', async () => {
+    const url = await designLink();
+    if (navigator.share) { try { await navigator.share({ title: 'My photo booth design', url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(url); toast('🔗 Link copied — send it to a friend'); }
+    catch (e) { prompt('Copy this link:', url); }
+  });
+  window.addEventListener('hashchange', readDesignLink);
+
   $('designSave').addEventListener('click', () => {
     const name = askText('Name this design:', state.line1 || 'My design', 30);
     if (!name) return;
@@ -3487,6 +3518,7 @@
   PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); buildSwapChips(); });
   loadSettings();
   syncAdj(); buildDesigns(); buildSwapChips();
+  setTimeout(readDesignLink, 300);
   buildThemes();
   buildEmojis();
   syncUI();
