@@ -713,14 +713,14 @@
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
     saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: '', cuts: [],
-    vidFrame: { zoom: 1, cx: null, cy: null }, vidCrop: { x: .5, y: .5, z: 1 }
+    vidFrame: { zoom: 1, cx: null, cy: null }, vidCrop: { x: .5, y: .5, z: 1 }, boothSlice: ''
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts', 'vidFrame', 'vidCrop'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts', 'vidFrame', 'vidCrop', 'boothSlice'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -774,7 +774,7 @@
 
   const LAYOUTS = [
     { id: 'strip', label: '📏 Strip' },
-    { id: 'grid', label: '🔲 Collage' },
+    { id: 'grid', label: '🔲 2×2 grid' },
     { id: 'row', label: '↔️ Side by side' },
     { id: 'hero', label: '🌟 Big + small' },
     { id: 'scrap', label: '📒 Scrapbook' },
@@ -919,6 +919,27 @@
 
   function computeLayout(kind, n) {
     if (isCollage(kind)) return collageLayout(kind, n);
+    const L = boothLayout(kind, n);
+    return state.boothSlice && window.PBCollage ? sliceBooth(L, n) : L;
+  }
+  // a booth layout with its photo area cut into angled slices (the templates from js/collage.js)
+  function sliceBooth(L, n) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    L.rects.forEach(r => { x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h); });
+    const box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, gap = L.border * 2.6;
+    const pcs = PBCollage.pieces(state.boothSlice, n, rowsFor);
+    if (!pcs || pcs.length < n) return L;
+    const toPx = ([x, y]) => [box.x + x * box.w, box.y + y * box.h];
+    const onEdge = (a, b) => ['x', 'y'].some((k, d) => [box[k], box[k] + (d ? box.h : box.w)].some(v => Math.abs(a[d] - v) < .5 && Math.abs(b[d] - v) < .5));
+    const rects = pcs.slice(0, n).map(poly => {
+      const pts = PBCollage.shrink(poly.map(toPx), gap / 2, 0, onEdge);
+      let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+      pts.forEach(([x, y]) => { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); });
+      return { x: a, y: b, w: c - a, h: d - b, poly: pts };
+    });
+    return { ...L, rects, box };
+  }
+  function boothLayout(kind, n) {
     if (kind === 'grid') {
       const W = 1600, m = 90, gap = 60, top = 90, cap = 400;
       const p = (W - 2 * m - gap) / 2;
@@ -969,7 +990,7 @@
   // area of a slot that actually shows the photo (Polaroids lose a strip at the bottom)
   const usesCard = () => (state.style === 'polaroid' || state.style === 'film') && (state.shape === 'rect' || state.shape === 'rounded');
   function innerRect(rect, border) {
-    if (state.style === 'polaroid' && usesCard()) {
+    if (state.style === 'polaroid' && usesCard() && !(rect && rect.poly)) {
       const extra = border * 3;
       return { w: rect.w, h: rect.h - extra, oy: -extra / 2 };
     }
@@ -979,6 +1000,7 @@
   // per-photo random placement for the fun styles (always consumes the same random numbers)
   function jitterFor(rect, tr) {
     const a = tr() * 2 - 1, b = tr() * 2 - 1, c = tr() * 2 - 1;
+    if (rect.poly) return { deg: 0, dx: 0, dy: 0 };             // angled pieces fit together, so they stay put
     let deg = 0, dx = 0, dy = 0;
     switch (state.style) {
       case 'tilt': deg = a * 2.2; break;
@@ -1120,29 +1142,45 @@
 
   // ---- face paint (js/facepaint.js), placed with the detailed face finder ----
   const paintOn = () => state.facePaint && state.facePaint !== 'none';
+  // a photo can have its own face paint (p.paint: an id, or 'none'); otherwise it follows the one for all photos
+  const paintOf = (p) => (p && p.paint) || state.facePaint || 'none';
+  const anyPaint = () => paintOn() || state.photos.some(p => p && p.paint && p.paint !== 'none');
   function paintFaces(p, src, key) {
-    if (!paintOn()) return src;
+    const paint = paintOf(p);
+    if (!paint || paint === 'none') return src;
     if (p._mesh === undefined) {
       p._mesh = null;
       PBFace.loadMesh().then(ok => { p._mesh = ok ? PBFace.meshes(p.canvas) || [] : false; schedule(); });
     }
     if (!p._mesh || !p._mesh.length) return src;
-    const k = [key, state.bgSwap, state.theme, swapImageId, state.facePaint].join('|');
+    const k = [key, state.bgSwap, state.theme, swapImageId, paint].join('|');
     if (!p._fpc || p._fpc.key !== k) {
       const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
       const ctx = c.getContext('2d'); ctx.drawImage(src, 0, 0);
-      p._mesh.forEach(m => PBPaint.draw(ctx, m.map(q => ({ x: q.x * c.width, y: q.y * c.height })), state.facePaint));
+      p._mesh.forEach(m => PBPaint.draw(ctx, m.map(q => ({ x: q.x * c.width, y: q.y * c.height })), paint));
       p._fpc = { key: k, canvas: c };
     }
     return p._fpc.canvas;
   }
   function setPaint(id) {
-    state.facePaint = id; schedule(); buildPaintChips();
+    state.facePaint = id; schedule(); buildPaintChips(); syncPaintBadge();
     if (id !== 'none') { PBFace.loadMesh(); if (!PBFace.meshReady()) toast('🎨 Getting face paint ready…'); }
   }
   function buildPaintChips() {
     chipGroup($('paintChips'), PBPaint.EFFECTS, e => (state.facePaint || 'none') === e.id, e => setPaint(e.id));
   }
+  // face paint is easy to forget about (it's remembered between visits), so say so next to the preview
+  const paintName = (id) => plain((PBPaint.EFFECTS.find(e => e.id === id) || {}).label || '');
+  function syncPaintBadge() {
+    const own = state.photos.filter(p => p && p.paint && p.paint !== 'none').length;
+    const txt = paintOn() ? `🎨 ${paintName(state.facePaint)} face paint is on` + (own ? ` (${own} photo${own === 1 ? '' : 's'} with their own)` : '')
+      : own ? `🎨 Face paint on ${own} photo${own === 1 ? '' : 's'}` : '';
+    ['paintBadge', 'paintBadgeV'].forEach(id => { const el = $(id); if (!el) return; el.hidden = !txt; el.querySelector('span').textContent = txt; });
+  }
+  ['paintBadge', 'paintBadgeV'].forEach(id => $(id).querySelector('button').addEventListener('click', () => {
+    state.photos.forEach(p => { if (p) p.paint = null; });
+    setPaint('none'); toast('Face paint removed');
+  }));
   $('stampDate').addEventListener('change', (e) => { state.stampDate = e.target.value; schedule(); });
   $('stampToday').addEventListener('click', () => { state.stampDate = ''; buildStampChips(); schedule(); });
   function buildSwapChips() {
@@ -1168,7 +1206,8 @@
     return FRAME_COLORS[state.frame] || '#ffffff';
   }
 
-  function drawPhoto(ctx, p, rect, jit, border, idx, rng) {
+  function drawPhoto(ctx, p, rect, jit, border, idx, rng, inside) {
+    const T0 = ctx.getTransform();                           // picture coordinates, for stickers drawn inside the photo
     const style = state.style;
     const card = usesCard() && !rect.poly;
     const shape = state.shape;
@@ -1238,6 +1277,7 @@
       ctx.drawImage(src, c.sx * k, c.sy * k, c.sw * k, c.sh * k, px, py, ir.w, ir.h);
       const st = stampText();                                  // in the corner of the part that shows
       if (st) { ctx.save(); ctx.translate(px, py); PBStamp.draw(ctx, ir.w, ir.h, st); ctx.restore(); }
+      if (inside) { ctx.save(); ctx.setTransform(T0); inside(ctx); ctx.restore(); }   // "in the photo" stickers: cut off at its edge
     } else {
       ctx.fillStyle = '#efe6f7';
       ctx.fillRect(px, py, ir.w, ir.h);
@@ -1342,6 +1382,43 @@
 
   function themeRng(id) { return mulberry32(state.seed + id.length * 1000 + id.charCodeAt(0)); }
 
+  // ---- sticker layers: "in the photo" stickers are clipped to their photo (under frames, tape & borders) ----
+  // which photo a sticker belongs to: the face it's stuck to, else the photo under its middle (-1: none)
+  function slotAt(L, st) {
+    if (st.face && st.face.slot != null && L.rects[st.face.slot]) return st.face.slot;
+    const x = st.x * L.W, y = st.y * L.H;
+    for (let i = L.rects.length - 1; i >= 0; i--) {
+      const r = L.rects[i];
+      if (r.poly ? pointInPoly(r.poly, x, y) : (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h)) return i;
+    }
+    return -1;
+  }
+  function pointInPoly(P, x, y) {
+    let inside = false;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+      const [xi, yi] = P[i], [xj, yj] = P[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  // the outline a photo is clipped to (same maths as drawPhoto), in picture coordinates
+  function slotClip(ctx, L, i) {
+    const tr = mulberry32(state.seed * 3 + 11); let jit = null;
+    L.rects.forEach((r, k) => { const j = jitterFor(r, tr); if (k === i) jit = j; });
+    const rect = L.rects[i], ir = innerRect(rect, L.border), card = usesCard() && !rect.poly, shape = state.shape;
+    const px = -ir.w / 2, py = -rect.h / 2, photoR = shape === 'rounded' ? Math.min(ir.w, ir.h) * 0.08 : 0;
+    ctx.translate(rect.x + rect.w / 2 + jit.dx, rect.y + rect.h / 2 + jit.dy); ctx.rotate(jit.deg * Math.PI / 180);
+    ctx.beginPath();
+    if (rect.poly) { rect.poly.forEach(([x, y], k) => { const X = x - rect.x - rect.w / 2, Y = y - rect.y - rect.h / 2; k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.closePath(); }
+    else shapePath(ctx, card ? 'rect' : shape, px, py, ir.w, ir.h, photoR);
+  }
+  // split a sticker list into the ones drawn inside each photo and the ones on top
+  function layerSplit(L, list) {
+    const inner = L.rects.map(() => []), top = [];
+    (list || []).forEach(st => { const i = st.layer === 'photo' ? slotAt(L, st) : -1; (i >= 0 ? inner[i] : top).push(st); });
+    return { inner, top };
+  }
+
   const canvas = $('preview');
   function composeInto(cv, withStickers) {
     const L = computeLayout(state.layout, state.count);
@@ -1351,11 +1428,16 @@
     ctx.clearRect(0, 0, L.W, L.H);
     theme.draw(ctx, L.W, L.H, themeRng(state.theme + state.layout));
     const tr = mulberry32(state.seed * 3 + 11);
+    const list = withStickers ? curStickers() : [], faces = list.some(st => st.face) ? stripFaces() : null;
+    if (faces) list.forEach(st => { if (st.face && st.layer === 'photo') { const f = st.face.cam ? faces.find(g => g.slot === st.face.slot && g.idx === st.face.idx) : faceFor(st, faces, L.W, L.H); if (f) fitToFace(st, f, L.W, L.H); } });
+    const S = layerSplit(L, list);
     L.rects.forEach((rect, i) => {
-      drawPhoto(ctx, state.photos[i], rect, jitterFor(rect, tr), L.border, i, mulberry32(state.seed + i * 97));
+      const mine = S.inner[i];
+      drawPhoto(ctx, state.photos[i], rect, jitterFor(rect, tr), L.border, i, mulberry32(state.seed + i * 97),
+        mine.length ? (c) => drawStickers(c, mine, L.W, L.H, faces) : null);
     });
     drawCaption(ctx, L, theme);
-    if (withStickers) { const list = curStickers(); drawStickers(ctx, list, L.W, L.H, list.some(st => st.face) ? stripFaces() : null); }
+    if (withStickers) drawStickers(ctx, S.top, L.W, L.H, faces);
     drawEdge(ctx, L.W, L.H);
   }
   function render() {
@@ -1369,6 +1451,7 @@
     keepPhotosSoon();
     videoPreviewSoon();
     if (state.appMode !== 'video') updateMini(canvas);
+    syncPaintBadge();
   }
   // a live thumbnail of the picture in the bottom bar, so changes show without scrolling down to the preview
   function updateMini(src) {
@@ -1409,12 +1492,12 @@
     try {
       for (let i = 0; i < MAX_PHOTOS; i++) {
         const p = state.photos[i];
-        const sig = p ? [p.url, p.zoom, p.cx, p.cy, p.filter].join('|') : '';
+        const sig = p ? [p.url, p.zoom, p.cx, p.cy, p.filter, p.paint].join('|') : '';
         if (keptSig[i] === sig) continue;
         keptSig[i] = sig;
         if (!p) { await photoTx('readwrite', s => s.delete('slot' + i)); continue; }
         if (!p._blob) p._blob = await new Promise(r => p.canvas.toBlob(r, 'image/jpeg', 0.92));
-        const rec = { blob: p._blob, zoom: p.zoom, cx: p.cx, cy: p.cy, filter: p.filter };
+        const rec = { blob: p._blob, zoom: p.zoom, cx: p.cx, cy: p.cy, filter: p.filter, paint: p.paint || null };
         await photoTx('readwrite', s => s.put(rec, 'slot' + i));
       }
     } catch (e) { /* storage full or blocked (private mode): photos just won't survive a reload */ }
@@ -1429,9 +1512,9 @@
         const bmp = await createImageBitmap(rec.blob);
         const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
         c.getContext('2d').drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
-        const p = { canvas: c, url: URL.createObjectURL(rec.blob), zoom: rec.zoom || 1, cx: rec.cx, cy: rec.cy, filter: rec.filter || null, _blob: rec.blob };
+        const p = { canvas: c, url: URL.createObjectURL(rec.blob), zoom: rec.zoom || 1, cx: rec.cx, cy: rec.cy, filter: rec.filter || null, paint: rec.paint || null, _blob: rec.blob };
         state.photos[i] = p;
-        keptSig[i] = [p.url, p.zoom, p.cx, p.cy, p.filter].join('|');
+        keptSig[i] = [p.url, p.zoom, p.cx, p.cy, p.filter, p.paint].join('|');
         n++;
       }
     } catch (e) { /* nothing saved, or storage blocked */ }
@@ -1638,7 +1721,7 @@
     if (!p) { pickReplace(i); return; }
     menuIdx = i;
     $('pmNum').textContent = i + 1;
-    buildPhotoFilterChips();
+    buildPhotoFilterChips(); buildPhotoPaintChips();
     $('pmLeft').disabled = i === 0;
     $('pmRight').disabled = i === state.count - 1;
     $('photoMenu').hidden = false;
@@ -1666,6 +1749,17 @@
       setTimeout(() => { buildPhotoFilterChips(); schedule(); }, 30);
     });
   }
+  function buildPhotoPaintChips() {
+    const p = state.photos[menuIdx]; if (!p) return;
+    const allName = paintOn() ? paintName(state.facePaint) : 'none';
+    const items = [{ id: null, label: `Same as all (${allName})` }].concat(PBPaint.EFFECTS.map(e => ({ id: e.id, label: e.id === 'none' ? '🚫 No paint' : e.label })));
+    chipGroup($('pmPaint'), items, it => (p.paint || null) === it.id, it => {
+      p.paint = it.id;
+      if (it.id && it.id !== 'none') { PBFace.loadMesh(); if (!PBFace.meshReady()) toast('🎨 Getting face paint ready…'); }
+      buildPhotoPaintChips(); syncPaintBadge(); schedule(); keepPhotosSoon();
+      setTimeout(buildPhotoFilterChips, 60);
+    });
+  }
   $('pmAdjust').addEventListener('click', () => { const i = menuIdx; closePhotoMenu(); openEditor(i); });
   $('pmLeft').addEventListener('click', () => movePhoto(-1));
   $('pmRight').addEventListener('click', () => movePhoto(1));
@@ -1680,8 +1774,6 @@
 
   function buildCounts() {
     const col = isCollage();
-    chipGroup($('boothMode'), [{ id: false, label: '🎞️ Photo booth' }, { id: true, label: '▦ Collage' }], m => col === m.id,
-      m => selectLayout(m.id ? (state.lastCollage || 'c-grid') : (state.lastBooth || 'strip')));
     const opts = state.layout === 'c-custom' ? [{ label: `${state.count} (from your cuts)`, n: state.count }]
       : col ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ label: String(n), n })) : [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }];
     chipGroup($('counts'), opts, it => state.count === it.n, it => {
@@ -1710,18 +1802,24 @@
     state.layout = id;
     if (now) state.lastCollage = id; else state.lastBooth = id;
     markThemes(); syncUI(); schedule();
+    if (typeof syncModeClasses === 'function') syncModeClasses();
   }
+  const BOOTH_SLICES = () => [{ id: '', label: '▭ None' }].concat((window.PBCollage ? PBCollage.TEMPLATES : []).filter(t => t.id !== 'p-diamond'));
   function buildLayouts() {
     chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => selectLayout(it.id));
+    chipGroup($('boothSlices'), BOOTH_SLICES(), t => (state.boothSlice || '') === t.id, t => { state.boothSlice = t.id; buildLayouts(); schedule(); });
+    const sliced = !!state.boothSlice;
+    $('styleNote').hidden = !sliced;
+    $('styleNote').textContent = 'Sliced photos stay straight and shaped by their slice, so tilted, Polaroid and film styles and photo shapes don\'t apply.';
+    chipGroup($('collageShapes'), SHAPES, it => state.shape === it.id, it => { state.shape = it.id; buildLayouts(); schedule(); });
     chipGroup($('collages'), COLLAGES.filter(c => c.id !== 'p-diamond' || state.count === 5 || state.layout === c.id), it => state.layout === it.id, it => {
       if (it.id === 'c-custom') { openCutEditor(); return; }
       selectLayout(it.id);
     });
-    $('collageOpts').hidden = !isCollage();
     chipGroup($('collageSizes'), SIZES, z => state.collageSize === z.id, z => { state.collageSize = z.id; buildLayouts(); schedule(); });
     [...$('collageSizes').children].forEach((b, i) => { b.title = SIZES[i].hint; });
     $('collageSizeHint').textContent = sizeOf(state.collageSize).hint + ` · ${sizeOf(state.collageSize).w}×${sizeOf(state.collageSize).h}`;
-    $('collageGap').value = state.collageGap; $('collageCaption').checked = !!state.caption;
+    $('collageGap').value = state.collageGap; $('collageCaption').checked = $('msgOnCollage').checked = !!state.caption;
     chipGroup($('styles'), STYLES, it => state.style === it.id, it => { state.style = it.id; buildLayouts(); schedule(); });
     chipGroup($('shapes'), SHAPES, it => state.shape === it.id, it => { state.shape = it.id; buildLayouts(); schedule(); });
   }
@@ -1818,7 +1916,9 @@
   window.addEventListener('resize', () => requestAnimationFrame(drawCutEd));
 
   $('collageGap').addEventListener('input', (e) => { state.collageGap = +e.target.value; schedule(); });
-  $('collageCaption').addEventListener('change', (e) => { state.caption = e.target.checked; schedule(); });
+  ['collageCaption', 'msgOnCollage'].forEach(id => $(id).addEventListener('change', (e) => {
+    state.caption = e.target.checked; $('collageCaption').checked = $('msgOnCollage').checked = state.caption; schedule();
+  }));
   function buildFonts() {
     chipGroup($('fonts'), Object.entries(FONTS).map(([id, f]) => ({ ...f, id })), it => state.font === it.id, it => {
       state.font = it.id; buildFonts(); schedule();
@@ -2303,6 +2403,17 @@
     const ir = innerRect(L.rects[i], L.border);
     return ir.w / ir.h;
   }
+  // the outline of photo i's window, fitted into the box (fx, fy, fw, fh): an angled piece, or the photo shape
+  function editorWindow(ctx, i, fx, fy, fw, fh) {
+    const L = computeLayout(state.layout, state.count), r = L.rects[i];
+    if (r && r.poly) {
+      const ir = innerRect(r, L.border), sx = fw / ir.w, sy = fh / r.h;
+      r.poly.forEach(([x, y], k) => { const X = fx + (x - r.x) * sx, Y = fy + (y - r.y) * sy; k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.closePath(); return;
+    }
+    const card = usesCard(), shape = card ? 'rect' : (state.shape === 'rounded' ? 'rect' : state.shape);
+    shapePath(ctx, shape, fx, fy, fw, fh, 0);
+  }
   function filledIdx() { return state.photos.slice(0, state.count).map((p, i) => p ? i : -1).filter(i => i >= 0); }
   function openEditor(i) {
     if (!state.photos[i]) return;
@@ -2344,9 +2455,10 @@
     const k = fw / c.sw; ed.k = k;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(photoSource(p), fx - c.sx * k, fy - c.sy * k, p.canvas.width * k, p.canvas.height * k);
-    const edShape = state.shape === 'rounded' ? 'rect' : state.shape;
+    const poly = !!(computeLayout(state.layout, state.count).rects[ed.i] || {}).poly;
+    const edShape = poly ? 'poly' : usesCard() || state.shape === 'rounded' ? 'rect' : state.shape;
     ctx.fillStyle = 'rgba(20,10,31,.72)';
-    ctx.beginPath(); ctx.rect(0, 0, cw, ch); shapePath(ctx, edShape, fx, fy, fw, fh, 0); ctx.fill('evenodd');
+    ctx.beginPath(); ctx.rect(0, 0, cw, ch); editorWindow(ctx, ed.i, fx, fy, fw, fh); ctx.fill('evenodd');
     ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1;
     ctx.beginPath();
     for (let t = 1; t <= 2; t++) {
@@ -2355,7 +2467,7 @@
     }
     ctx.stroke();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
-    ctx.beginPath(); shapePath(ctx, edShape, fx, fy, fw, fh, 0); ctx.stroke();
+    ctx.beginPath(); editorWindow(ctx, ed.i, fx, fy, fw, fh); ctx.stroke();
     if (edShape !== 'rect') { ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 1; ctx.strokeRect(fx, fy, fw, fh); }
     $('edZoom').value = p.zoom;
   }
@@ -2452,10 +2564,10 @@
     const set = (k, v) => { const el = $('sum-' + k); if (el) el.textContent = v; };
     set('occasion', PRESETS[state.preset] ? plain(PRESETS[state.preset].name) : 'Custom');
     set('background', THEMES[state.theme].name);
-    set('message', state.line1.trim() || state.line2.trim() || 'No text');
+    set('message', isCollage() && !state.caption ? 'Not shown on this collage' : state.line1.trim() || state.line2.trim() || 'No text');
     set('icons', (state.iconLeft || state.iconRight) ? `${state.iconLeft || '–'}  ${state.iconRight || '–'}` : 'None');
-    set('layout', isCollage() ? `Collage · ${plain(labelOf(COLLAGES, state.layout))} · ${plain(labelOf(SIZES, state.collageSize))}`
-      : `${plain(labelOf(LAYOUTS, state.layout))} · ${plain(labelOf(STYLES, state.style))}`);
+    set('layout', `${plain(labelOf(LAYOUTS, state.layout))} · ${state.boothSlice ? plain(labelOf(BOOTH_SLICES(), state.boothSlice)) : plain(labelOf(STYLES, state.style))}`);
+    set('collage', `${plain(labelOf(COLLAGES, state.layout))} · ${plain(labelOf(SIZES, state.collageSize))}`);
     const frame = state.frameSize <= 0 ? 'No frame' : `${state.frame === 'custom' ? 'Custom' : state.frame[0].toUpperCase() + state.frame.slice(1)} frame`;
     set('frames', frame + (state.edge !== 'none' ? ' + border' : ''));
     set('filters', (PBFilters.byId[state.filter] || {}).name || 'Original');
@@ -2901,7 +3013,19 @@
     ctx.translate(V.x, V.y);
     ctx.beginPath(); ctx.rect(0, 0, V.w, V.h); ctx.clip();
     const moving = stEd.video && stEd.list.some(s => s.anim);
-    drawStickers(ctx, stEd.list, V.w, V.h, stEd.faces, null, moving ? performance.now() / 1000 : null);
+    const tNow = moving ? performance.now() / 1000 : null;
+    if (!stEd.video && stEd.list.some(s => s.layer === 'photo')) {
+      // "in the photo" stickers, clipped to their photo like in the finished picture
+      const L = computeLayout(state.layout, state.count), T = ctx.getTransform();
+      if (stEd.faces) stEd.list.forEach(st => { if (st.face && st.layer === 'photo') { const f = faceFor(st, stEd.faces, V.w, V.h); if (f) fitToFace(st, f, V.w, V.h); } });
+      const S = layerSplit(L, stEd.list);
+      S.inner.forEach((mine, i) => {
+        if (!mine.length) return;
+        ctx.save(); ctx.scale(V.w / L.W, V.h / L.H); slotClip(ctx, L, i); ctx.setTransform(T); ctx.clip();
+        drawStickers(ctx, mine, V.w, V.h, stEd.faces, null, tNow); ctx.restore();
+      });
+      drawStickers(ctx, S.top, V.w, V.h, stEd.faces, null, tNow);
+    } else drawStickers(ctx, stEd.list, V.w, V.h, stEd.faces, null, tNow);
     if (moving && !stEd.animRaf) stEd.animRaf = requestAnimationFrame(() => { stEd.animRaf = 0; drawStEd(true); });
     const st = stEd.list[stEd.sel];
     if (st) {
@@ -2925,7 +3049,8 @@
       ctx.beginPath(); ctx.arc(hw + 6, -hh - 6, 5.5, -Math.PI * .9, Math.PI * .4); ctx.stroke();   // little turn arrow
     }
     ctx.restore();
-    $('stTools').hidden = !st;
+    $('stTools').hidden = !st; $('stTray').hidden = !!st;
+    if (st !== stEd.lastSel) { stEd.lastSel = st; document.querySelector('.st-tools').scrollLeft = 0; }     // same spot, same height: the picture doesn't jump
     if (st) syncStyle(st);
     const n = stEd.faces ? stEd.faces.length : 0;
     const hint = 'Drag · pinch or use the corner ↻ to resize & turn';
@@ -3037,6 +3162,13 @@
     stEd.list.push(st); stEd.sel = stEd.list.length - 1;
     drawStEd();
   }
+  $('stLayer').addEventListener('click', () => {
+    const st = stEd.list[stEd.sel]; if (!st) return;
+    st.layer = st.layer === 'photo' ? 'top' : 'photo';
+    toast(st.layer === 'photo' ? '🖼️ In the photo: cut off at its edge, under the frame' : '⬆ On top of everything');
+    drawStEd();
+  });
+  $('stAddMore').addEventListener('click', () => { stEd.sel = -1; drawStEd(true); });
   const withSel = (fn) => () => { const st = stEd.list[stEd.sel]; if (st) { fn(st); refitSel(st, false); drawStEd(); } };
   function noFacesMsg() {
     toast(PBFace.status === 'failed' ? "Face finding isn't available on this device"
@@ -3258,6 +3390,12 @@
   let styleFor = null;
   function syncStyle(st) {
     $('stAttach').setAttribute('aria-pressed', st.face ? 'true' : 'false');
+    $('stAttach').querySelector('small').textContent = st.face ? 'Stuck to face' : 'Stick to face';
+    $('stLayer').hidden = !!stEd.video;
+    const inPhoto = st.layer === 'photo';
+    $('stLayer').setAttribute('aria-pressed', String(inPhoto));
+    $('stLayer').querySelector('b').textContent = inPhoto ? '🖼️' : '⬆';
+    $('stLayer').querySelector('small').textContent = inPhoto ? 'In the photo' : 'On top';
     $('stEdit').hidden = !hasText(st);
     const sig = [stEd.sel, st.kind, st.border, st.color, st.font, st.anim].join('|');
     if (styleFor === sig) return;
@@ -3739,11 +3877,22 @@
   // ================= Photos mode vs Video mode =================
   // Everything shared (occasion, background, message, filters, face paint, stickers) stays; photo-only
   // settings (photos, layouts, collages, party, save) and video-only ones (clip, music, size) swap.
+  // Three modes at the top: 🎞️ Photo booth (booth layouts), ▦ Collage (collage designs) and 🎥 Video.
+  // 'photo' (from the camera's Photo tab) keeps whichever of booth / collage is in use.
+  const uiMode = () => state.appMode === 'video' ? 'video' : isCollage() ? 'collage' : 'booth';
+  function syncModeClasses() {
+    const m = uiMode();
+    document.body.classList.toggle('mode-video', m === 'video');
+    document.body.classList.toggle('mode-photo', m !== 'video');
+    document.body.classList.toggle('mode-booth', m === 'booth');
+    document.body.classList.toggle('mode-collage', m === 'collage');
+    [...$('appMode').children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
+  }
   function setAppMode(m) {
     state.appMode = m === 'video' ? 'video' : 'photo';
-    document.body.classList.toggle('mode-video', state.appMode === 'video');
-    document.body.classList.toggle('mode-photo', state.appMode === 'photo');
-    [...$('appMode').children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === state.appMode)));
+    if ((m === 'booth' || m === 'collage') && (m === 'collage') !== isCollage())
+      selectLayout(m === 'collage' ? (state.lastCollage || 'c-grid') : (state.lastBooth || 'strip'));
+    syncModeClasses();
     $('openStickers').textContent = state.appMode === 'video' ? '😎 Video sticker studio' : '😎 Open sticker studio';
     saveSettings();
     if (state.appMode === 'video') { buildVidSettings(); drawVideoPreview(); } else updateMini(canvas);
