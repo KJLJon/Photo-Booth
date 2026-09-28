@@ -630,14 +630,15 @@
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
-    collageSize: 'square', collageGap: .025, caption: false, boothStash: null
+    collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
+    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -1408,8 +1409,8 @@
 
   // ---- my designs: everything except the photos, saved on this device ----
   const DESIGNS_KEY = 'photobooth-designs-v1';
-  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone'].includes(k)).concat('camProps');
-  function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
+  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone', 'lastCollage', 'lastBooth', 'boothStash'].includes(k)).concat('camProps');
+  function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { if (state[k] !== undefined) d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
   function applyDesign(d) {
     DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
     if (!THEMES[state.theme] || state.theme === 'photo') state.theme = 'confetti';
@@ -1794,7 +1795,7 @@
   let sheetFile = null, sheetUrl = null;
   function showSaveSheet(blob, name, title, hint, modes) {
     $('printBtn').hidden = !/^image\/(jpeg|png)$/.test(blob.type) || /gif|anim/i.test(name);
-    $('saveModes').hidden = !modes; if (!modes) $('savePicks').hidden = true;
+    $('saveModes').hidden = !modes; if (!modes) { $('savePicks').hidden = true; $('saveSizeRow').hidden = true; }
     $('shareBtn').textContent = '📤 Share';
     if (sheetUrl) URL.revokeObjectURL(sheetUrl);
     sheetUrl = URL.createObjectURL(blob);
@@ -1835,6 +1836,35 @@
     return cv;
   }
   const toJpeg = (cv) => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
+  // Resize a finished picture to a social-media size: fit inside (edges blurred / white / black) or crop to fill.
+  function fitInto(ctx, src, W, H, fit, scratch) {
+    const sw = src.width, sh = src.height;
+    if (fit === 'fill') {
+      const k = Math.max(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k); return;
+    }
+    if (fit === 'blur') {
+      const t = scratch || document.createElement('canvas'); t.width = 24; t.height = Math.max(1, Math.round(24 * H / W));
+      const tc = t.getContext('2d'), k0 = Math.max(t.width / sw, t.height / sh);
+      tc.drawImage(src, (t.width - sw * k0) / 2, (t.height - sh * k0) / 2, sw * k0, sh * k0);
+      ctx.imageSmoothingQuality = 'high'; ctx.drawImage(t, 0, 0, W, H);
+      ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, 0, W, H);
+    } else { ctx.fillStyle = fit === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, W, H); }
+    const k = Math.min(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k);
+  }
+  function toSocial(src, id, fit) {
+    if (!id || id === 'orig') return src;
+    const Z = sizeOf(id), cv = document.createElement('canvas'); cv.width = Z.w; cv.height = Z.h;
+    fitInto(cv.getContext('2d'), src, Z.w, Z.h, fit);
+    return cv;
+  }
+  function fillSizeSelect(sel, value) {
+    if (!sel.options.length) {
+      sel.add(new Option('Original size', 'orig'));
+      SIZES.forEach(z => sel.add(new Option(`${z.label.replace(/^\S+ /, '')} · ${z.hint}`, z.id)));
+    }
+    sel.value = value || 'orig';
+  }
+
   // A 4×6 photo print at 300 dpi. A strip is printed twice side by side (cut down the middle), like a
   // real photo booth; other layouts are centred on the sheet in whichever way round fits best.
   function composePrint(src) {
@@ -1858,7 +1888,7 @@
   async function buildSaveSheet() {
     const name = `photobooth-${save.stamp}`;
     if (save.mode === 'booth') {
-      if (!save.strip) { render(); save.strip = await toJpeg(canvas); }
+      if (!save.strip) { render(); save.strip = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit)); }
       if (!save.strip) { toast('Could not create the image'); return; }
       showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
     } else if (save.mode === 'print') {
@@ -1868,7 +1898,7 @@
         'Print at 4×6 in (10×15 cm), "fit to page" off, on a printer or at a photo kiosk.', true);
     } else {
       const idx = filledIdx();
-      if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(composePhotoOnly(i))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
+      if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(composePhotoOnly(i), state.saveSize, state.saveFit))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
       save.pick = Math.min(save.pick, save.photos.length - 1);
       const f = save.photos[save.pick];
       showSaveSheet(f, f.name, 'Your photos 📷', photoHint(), true);
@@ -1885,9 +1915,14 @@
       b.appendChild(im); b.addEventListener('click', () => { save.pick = k; buildSaveSheet(); });
       picks.appendChild(b);
     });
+    $('saveSizeRow').hidden = save.mode === 'print';
+    fillSizeSelect($('saveSize'), state.saveSize); $('saveFit').value = state.saveFit; $('saveFit').hidden = state.saveSize === 'orig';
     chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Design' }, { id: 'photos', label: '📷 Photos' }, { id: 'print', label: '🖨️ 4×6 print' }],
       m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
   }
+  const resave = () => { Object.assign(save, { strip: null, photos: [] }); saveSettings(); buildSaveSheet(); };
+  $('saveSize').addEventListener('change', (e) => { state.saveSize = e.target.value; resave(); });
+  $('saveFit').addEventListener('change', (e) => { state.saveFit = e.target.value; resave(); });
   $('save').addEventListener('click', () => {
     Object.assign(save, { strip: null, print: null, photos: [], pick: 0, stamp: stamp() });
     buildSaveSheet();
@@ -3624,8 +3659,13 @@
     const bctx = bg.getContext('2d');
     theme.draw(bctx, W, H, themeRng(state.theme + 'video'));
     drawCaption(bctx, L, theme);
-    const out = document.createElement('canvas'); out.width = W; out.height = H;
-    const octx = out.getContext('2d');
+    // the booth/plain picture is drawn on `stage`; `out` is what gets recorded (a social size, or the same canvas)
+    const stage = document.createElement('canvas'); stage.width = W; stage.height = H;
+    const octx = stage.getContext('2d');
+    const Z = state.vidSize && state.vidSize !== 'orig' ? sizeOf(state.vidSize) : null, zk = Z ? 1280 / Math.max(Z.w, Z.h) : 1;
+    const out = Z ? document.createElement('canvas') : stage;
+    if (Z) { out.width = Math.round(Z.w * zk) & ~1; out.height = Math.round(Z.h * zk) & ~1; }
+    const blurTmp = document.createElement('canvas');
     const frame = document.createElement('canvas');
     const fctx = frame.getContext('2d', { willReadFrequently: true });
     const holder = { canvas: frame, zoom: 1, cx: null, cy: null, raw: true };
@@ -3634,7 +3674,7 @@
     const maskCache = new WeakMap(), meshCache = new WeakMap(), swapOut = document.createElement('canvas');
     const swapOn = () => state.bgSwap !== 'none' && !(state.bgSwap === 'custom' && !swapImage) && PBFace.segReady();
     const comp = {
-      out, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
+      out, stage, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
       track: new Map(), raw: null,
       // faces found in the last frame, in picture coordinates
       facesOf(raw) { return raw ? placeFaces(raw, photoXform(holder, L.rects[0], jit, L.border), 0, W, H) : null; },
@@ -3674,7 +3714,7 @@
         if (plain) {
           const T = photoXform(holder, L.rects[0], jit, L.border);
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
-          if (out.width !== ow || out.height !== oh) { out.width = ow; out.height = oh; }
+          if (stage.width !== ow || stage.height !== oh) { stage.width = ow; stage.height = oh; }
           octx.drawImage(frame, 0, 0, ow, oh);
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, ow, oh); }
           if (opts.stickers !== false) {
@@ -3689,6 +3729,7 @@
           if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
           drawEdge(octx, W, H);
         }
+        if (Z) fitInto(out.getContext('2d'), stage, out.width, out.height, state.vidFit, blurTmp);
         if (comp.collect && opts.stickers !== false) {
           const now = opts.t != null ? opts.t : performance.now();
           if (now - comp.lastGrab >= comp.gifDelay - 1) {
@@ -3907,6 +3948,7 @@
     const v = $('outVideo'); v.src = vid.url; v.muted = !state.music || state.music === 'none';
     v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
     $('vidDl').href = vid.url; $('vidDl').download = vid.file.name;
+    fillSizeSelect($('vidSize'), state.vidSize); $('vidFit').value = state.vidFit; $('vidFit').hidden = state.vidSize === 'orig';
     chipGroup($('vidMusic'), PBMusic.TUNES, t => (state.music || 'none') === t.id, async t => {
       if (state.music === t.id) return;
       try { audioCtx(); } catch (e) { /* no audio here */ }
@@ -3931,6 +3973,9 @@
   }
   function closeVideoSheet() { $('videoSheet').hidden = true; $('outVideo').pause(); syncScroll(); }
   $('vidClose').addEventListener('click', closeVideoSheet);
+  const remakeFor = (k) => async (e) => { state[k] = e.target.value; saveSettings(); closeVideoSheet(); await buildVideo(); };
+  $('vidSize').addEventListener('change', remakeFor('vidSize'));
+  $('vidFit').addEventListener('change', remakeFor('vidFit'));
   $('vidShare').addEventListener('click', async () => { try { await navigator.share({ files: [vid.file] }); } catch (e) { /* cancelled */ } });
   $('vidRetake').addEventListener('click', () => { const m = cam.last && cam.last.mode; closeVideoSheet(); openCamera({ mode: m ? m.id : 'boomerang' }); });
 
@@ -3973,7 +4018,7 @@
     }
     base = document.createElement('canvas'); base.width = comp.W; base.height = comp.H;
     const bctx = base.getContext('2d');
-    bctx.drawImage(comp.out, 0, 0);
+    bctx.drawImage(comp.stage, 0, 0);                        // stickers live in booth-picture coordinates
     // props are placed on this frame; while the video is made they follow each face
     let faces = null;
     PBFace.load().then(ok => { faces = comp.facesOf(ok && comp.raw ? PBFace.detect(comp.raw) : []) || []; facesChanged(); });

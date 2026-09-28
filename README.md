@@ -4,8 +4,22 @@ A birthday photo booth that runs in the browser and installs as an app (PWA). Ta
 pick a background, message, filters and props, then save a photo strip, or record a boomerang,
 strobe, slow-mo or 360° clip and save it as a video or GIF. Everything happens on your device.
 
-**Camera:** pick face props with 😎 and see them on everyone's face live. Props and face paint
-come along onto the photos and videos you take.
+**Camera:** 📷 Photo / 🎥 Video tabs switch between photo-booth shots and video modes (boomerang,
+strobe, slow-mo, 360). Zoom by pinching, scrolling or the 1×/2×/3× buttons. Phones that list their
+ultra-wide or telephoto lens also get 0.5× and 2×/3× lens buttons. Pick face props with 😎 and see them
+on everyone's face live. Props and face paint come along onto the photos and videos you take.
+
+**Collages:** switch the photo section to **▦ Collage** to tile 1–9 photos with a white border (or
+any background) in 7 designs: grid, big + small, mosaic, columns, center, film and scattered prints.
+Pick the collage size from social-media shapes.
+
+**Holidays:** 24 occasions with their own backgrounds (Lunar New Year, Mardi Gras, St. Patrick's,
+Easter, Mother's & Father's Day, 4th of July, Diwali, Thanksgiving, Hanukkah, Christmas, Kwanzaa,
+Ramadan & Eid and more). Long lists have a search box ("july", "dad", "december"…).
+
+**Social media sizes:** when saving, pick Square 1:1, Portrait 4:5, Story 9:16 (Stories, Reels,
+TikTok, Snapchat, Shorts), Tall 2:3 (Pinterest), Landscape 1.91:1, Wide 16:9 (X, YouTube) or 3:2.
+Fit it with blurred, white or black edges, or crop to fill. Videos can be saved in the same sizes.
 
 **Face props:** sunglasses, hats, mustaches, ears and other props snap onto faces and stay attached:
 - **Photo strips:** a prop sticks to the person in that photo. Retake or replace the photo and it
@@ -25,9 +39,14 @@ come along onto the photos and videos you take.
   scroll to resize and shift+scroll to turn.
 - Undo and redo (Ctrl/Cmd+Z). Delete removes a sticker, arrow keys nudge it.
 
-**Looks:** filters plus brightness, contrast and colour sliders. **Face paint** (tiger, kitty,
+**Looks:** photo shapes (square, rounded, oval, heart, circle, arch, hexagon, diamond, star,
+scalloped, stamp), filters plus brightness, contrast and colour sliders. **Face paint** (tiger, kitty,
 clown, glitter, sugar skull, butterfly, hearts) follows each face's shape. **Background swap** cuts
 people out and puts them on a beach, in space, at a disco, on your own picture, or on a blur.
+
+**Editing a video's design:** after recording, change the background, message, filters or stickers.
+The **🎬 Your video** preview follows along, and **Remake video** rebuilds the video. The clip is kept
+on the device, so you can remake it later.
 
 **Videos:** add background music (Happy Birthday, party, chill, drumroll). It's synthesized
 in the browser, so there are no audio files and it works offline.
@@ -89,6 +108,7 @@ app/                  ← everything that gets published
   css/app.css
   js/app.js           ← the app
   js/props.js         ← clip-art props (drawn in code) and where each sits on a face
+  js/holidays.js      ← holiday backgrounds and occasions (drawn in code)
   js/filters.js       ← photo filters
   js/encoders.js      ← GIF / animated PNG encoders
   js/face.js          ← MediaPipe: face finder, background cutter, detailed face shape (loaded when needed)

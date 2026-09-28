@@ -207,6 +207,8 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .save-modes { justify-content: center; margin-bottom: 10px; flex-wrap: nowrap; }
 .save-modes.music .chip { flex: none; white-space: nowrap; }
 .save-modes.music { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; margin: 10px 0 0; scrollbar-width: none; }
+.size-row { display: flex; gap: 6px; justify-content: center; margin: 8px 0 0; flex-wrap: wrap; }
+.size-row select { font: inherit; font-size: .82rem; padding: 6px 8px; border-radius: 10px; border: 2px solid var(--line); background: #fff; color: var(--ink); max-width: 100%; }
 .save-modes .chip { padding: 7px 12px; font-size: .85rem; }
 .save-picks { display: flex; gap: 8px; justify-content: center; margin-top: 8px; overflow-x: auto; }
 .save-picks button { flex: none; padding: 0; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 3px solid transparent; background: none; }
