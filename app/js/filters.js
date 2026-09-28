@@ -19,7 +19,8 @@
     { id: 'comic', name: 'Comic', adv: true },
     { id: 'sketch', name: 'Sketch', adv: true },
     { id: 'popart', name: 'Pop Art', adv: true },
-    { id: 'pixel', name: 'Pixel', adv: true }
+    { id: 'pixel', name: 'Pixel', adv: true },
+    { id: 'y2k', name: '2000s Digicam', adv: true }
   ];
   const byId = Object.fromEntries(LIST.map(f => [f.id, f]));
 
@@ -31,7 +32,7 @@
     noir: 'grayscale(1) contrast(1.55)', glam: 'brightness(1.12) contrast(1.05) saturate(.95) blur(.4px)',
     glambw: 'grayscale(1) brightness(1.16) contrast(1.15) blur(.4px)', dreamy: 'brightness(1.1) saturate(1.2) contrast(.92) blur(.6px)',
     cartoon: 'saturate(1.6) contrast(1.25)', comic: 'saturate(1.6) contrast(1.35)', sketch: 'grayscale(1) contrast(1.6) brightness(1.2)',
-    popart: 'saturate(2) contrast(1.6)', pixel: ''
+    popart: 'saturate(2) contrast(1.6)', pixel: '', y2k: 'saturate(1.3) contrast(1.15) brightness(1.06) sepia(.12)'
   };
 
   const lum = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
@@ -276,6 +277,25 @@
     }
   }
 
+  // A little early-2000s point-and-shoot: punchy colour, blown highlights, on-camera flash falloff,
+  // a warm cast, sensor noise and slightly soft, low-megapixel detail.
+  function y2k(d, w, h) {
+    const soft = boxBlur(d, w, h, Math.max(1, Math.round(Math.min(w, h) / 600)));
+    const cx = w / 2, cy = h * .45, R = Math.hypot(cx, cy);
+    let seed = 1234567;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      let r = soft[i], g = soft[i + 1], b = soft[i + 2];
+      const l = lum(r, g, b);
+      r = l + (r - l) * 1.35; g = l + (g - l) * 1.3; b = l + (b - l) * 1.2;               // saturated
+      r = (r - 128) * 1.18 + 136; g = (g - 128) * 1.15 + 130; b = (b - 128) * 1.12 + 118; // contrast + warm
+      const fall = 1.12 - .5 * Math.pow(Math.hypot(x - cx, y - cy) / R, 1.8);           // flash hot-spot
+      const n = (rnd() - .5) * 18;
+      d[i] = c8(r * fall + n); d[i + 1] = c8(g * fall + n * .9); d[i + 2] = c8(b * fall + n * 1.2);
+    }
+  }
+
   function run(d, w, h, id) {
     switch (id) {
       case 'glam': glam(d, w, h, false); break;
@@ -286,6 +306,7 @@
       case 'sketch': sketch(d, w, h); break;
       case 'popart': popart(d, w, h); break;
       case 'pixel': pixel(d, w, h); break;
+      case 'y2k': y2k(d, w, h); break;
       default: simple(d, w, h, id);
     }
   }

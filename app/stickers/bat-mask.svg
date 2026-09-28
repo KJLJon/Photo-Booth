@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="150" viewBox="0 0 320 150">
+<defs><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2a55"/><stop offset="1" stop-color="#0f0a18"/></linearGradient></defs>
+<path fill-rule="evenodd" fill="url(#k)" stroke="#000" stroke-width="4" stroke-linejoin="round" d="M160 44 L146 14 L138 40 Q100 30 60 34 Q30 38 4 22 Q18 52 16 76 Q34 70 44 84 Q56 74 72 86 Q82 104 104 104 Q130 104 148 92 Q160 100 172 92 Q190 104 216 104 Q238 104 248 86 Q264 74 276 84 Q286 70 304 76 Q302 52 316 22 Q290 38 260 34 Q220 30 182 40 L174 14Z
+M84 70 Q110 50 136 70 Q110 90 84 70Z M184 70 Q210 50 236 70 Q210 90 184 70Z"/>
+<path d="M80 50 Q110 40 140 52 M180 52 Q210 40 240 50" stroke="#8e6cc0" stroke-width="3" fill="none" opacity=".7" stroke-linecap="round"/>
+<circle cx="150" cy="24" r="2" fill="#ff3b3b"/><circle cx="170" cy="24" r="2" fill="#ff3b3b"/>
+</svg>

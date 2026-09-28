@@ -45,6 +45,31 @@
     c.restore();
   }
 
+  // The year for New Year props: in December it's next year's party already.
+  const partyYear = () => { const d = new Date(); return String(d.getFullYear() + (d.getMonth() === 11 ? 1 : 0)); };
+  function sparkle4(c, x, y, r, col) {
+    c.fillStyle = col; c.beginPath(); c.moveTo(x, y - r); c.quadraticCurveTo(x, y, x + r, y); c.quadraticCurveTo(x, y, x, y + r);
+    c.quadraticCurveTo(x, y, x - r, y); c.quadraticCurveTo(x, y, x, y - r); c.fill();
+  }
+  // party glasses with words above the lenses (eyes sit at y = .17)
+  function textGlasses(c, unit, text, o) {
+    const ey = .17, ex = .217, R = .14;
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    c.strokeStyle = o.frame; c.lineWidth = .045;
+    c.beginPath(); c.moveTo(-.5, ey - .06); c.lineTo(-ex - R, ey - .02); c.moveTo(.5, ey - .06); c.lineTo(ex + R, ey - .02); c.stroke();
+    c.beginPath(); c.moveTo(-ex + R * .8, ey - .04); c.quadraticCurveTo(0, ey - .12, ex - R * .8, ey - .04); c.stroke();
+    for (const s of [-1, 1]) {
+      c.beginPath(); c.arc(s * ex, ey, R, 0, Math.PI * 2);
+      c.fillStyle = o.lens; c.fill();
+      c.lineWidth = .05; c.strokeStyle = o.frame; c.stroke();
+      c.lineWidth = .016; c.strokeStyle = o.shine; c.beginPath(); c.arc(s * ex, ey, R - .005, Math.PI * 1.1, Math.PI * 1.45); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.ellipse(s * ex - .05, ey - .06, .035, .018, -.6, 0, Math.PI * 2); c.fill();
+    }
+    // the words, on a little stand joined to the frames
+    c.fillStyle = o.frame; c.fillRect(-.012, -.06, .024, .12);
+    unitText(c, unit, text, { w: 900, f: IMPACT }, o.size || .27, -.2, o.fill, o.stroke, .2, .98);
+    (o.bits || []).forEach(([x, y, r, col]) => sparkle4(c, x, y, r, col));
+  }
   const P = {
     shades: { name: 'Sunglasses', h: .34, face: { at: 'eyes', y: .02, s: 1.95 }, draw(c) {
       c.fillStyle = '#111'; c.fillRect(-.5, -.15, 1, .05);
@@ -57,7 +82,7 @@
       }
       bridge(c, '#111');
     } },
-    heartglasses: { name: 'Heart glasses', h: .42, face: { at: 'eyes', y: .03, s: 1.95 }, draw(c) {
+    heartglasses: { name: 'Heart glasses', theme: 'valentine', h: .42, face: { at: 'eyes', y: .03, s: 1.95 }, draw(c) {
       for (const s of [-1, 1]) {
         c.beginPath(); heartPath(c, s * .26, -.02, .22);
         c.fillStyle = 'rgba(255,40,90,.85)'; c.fill();
@@ -66,12 +91,42 @@
       }
       bridge(c, '#b0003a');
     } },
-    starglasses: { name: 'Star glasses', h: .46, face: { at: 'eyes', y: 0, s: 2 }, draw(c) {
+    starglasses: { name: 'Star glasses', theme: 'newyear party', h: .46, face: { at: 'eyes', y: 0, s: 2 }, draw(c) {
       for (const s of [-1, 1]) {
         c.beginPath(); starPath(c, s * .26, 0, .24, .11, 5, 0);
         c.fillStyle = '#ff5fa2'; c.fill(); c.lineWidth = .035; c.strokeStyle = '#ffd23f'; c.lineJoin = 'round'; c.stroke();
       }
       bridge(c, '#ffd23f');
+    } },
+    nyglasses: { name: 'New Year glasses', theme: 'newyear', h: .74, face: { at: 'eyes', y: -.39, s: 2.3 }, draw(c, unit) {
+      textGlasses(c, unit, partyYear(), { frame: '#d4a017', shine: '#fff6c8', lens: 'rgba(25,20,45,.55)', fill: '#ffd23f', stroke: '#6b4a00',
+        bits: [[-.45, -.3, .05, '#fff'], [.46, -.28, .04, '#ffe680'], [-.4, -.05, .03, '#ffe680'], [.42, -.02, .03, '#fff']] });
+    } },
+    bdayglasses: { name: 'Birthday glasses', theme: 'birthday', h: .74, face: { at: 'eyes', y: -.39, s: 2.3 }, draw(c, unit) {
+      textGlasses(c, unit, 'HAPPY BIRTHDAY', { frame: '#ff4f9a', shine: '#ffd1e6', lens: 'rgba(120,200,255,.35)', fill: '#fff', stroke: '#c2185b', size: .2,
+        bits: [[-.46, -.32, .04, '#ffd23f'], [.46, -.32, .04, '#3bceac'], [-.43, -.02, .03, '#3bceac'], [.44, -.04, .03, '#ffd23f']] });
+    } },
+    nytiara: { name: 'Happy New Year tiara', theme: 'newyear', h: .62, face: { at: 'eyes', y: -1.72, s: 2.6 }, draw(c, unit) {
+      // headband
+      c.lineCap = 'round'; c.lineWidth = .05; c.strokeStyle = '#222';
+      c.beginPath(); c.moveTo(-.46, .28); c.quadraticCurveTo(0, .12, .46, .28); c.stroke();
+      c.lineWidth = .025; c.strokeStyle = '#d4a017'; c.stroke();
+      // burst of gold rays behind the year
+      c.save(); c.translate(0, -.02);
+      for (let i = 0; i < 16; i++) {
+        c.rotate(Math.PI / 8); c.fillStyle = i % 2 ? '#ffe680' : '#d4a017';
+        c.beginPath(); c.moveTo(-.018, 0); c.lineTo(0, -.3); c.lineTo(.018, 0); c.closePath(); c.fill();
+      }
+      c.restore();
+      c.fillStyle = '#1b1b2f'; c.beginPath(); c.ellipse(0, -.02, .33, .13, 0, 0, Math.PI * 2); c.fill();
+      c.lineWidth = .02; c.strokeStyle = '#d4a017'; c.stroke();
+      unitText(c, unit, partyYear(), { w: 900, f: IMPACT }, .21, -.02, '#ffd23f', '#6b4a00', .16, .58);
+      // ribbon with the greeting
+      c.fillStyle = '#c1121f';
+      c.beginPath(); c.moveTo(-.44, .1); c.lineTo(.44, .1); c.lineTo(.4, .2); c.lineTo(.44, .3); c.lineTo(-.44, .3); c.lineTo(-.4, .2); c.closePath(); c.fill();
+      c.lineWidth = .012; c.strokeStyle = '#ffd23f'; c.stroke();
+      unitText(c, unit, 'HAPPY NEW YEAR', { w: 900, f: ROUND }, .12, .2, '#fff', null, 0, .74);
+      [[-.36, -.2, .05, '#fff'], [.35, -.22, .045, '#ffe680'], [-.2, -.28, .03, '#ffe680'], [.22, -.27, .03, '#fff']].forEach(([x, y, r, col]) => sparkle4(c, x, y, r, col));
     } },
     mustache: { name: 'Mustache', h: .34, face: { at: 'lip', y: .02, s: 1.15 }, draw(c) {
       c.fillStyle = '#2b1b10';
@@ -84,7 +139,7 @@
         c.closePath(); c.fill();
       }
     } },
-    partyhat: { name: 'Party hat', h: 1.2, face: { at: 'eyes', y: -2.1, s: 1.7 }, draw(c) {
+    partyhat: { name: 'Party hat', theme: 'birthday newyear', h: 1.2, face: { at: 'eyes', y: -2.1, s: 1.7 }, draw(c) {
       c.save(); c.beginPath(); c.moveTo(-.4, .5); c.lineTo(0, -.52); c.lineTo(.4, .5); c.closePath(); c.clip();
       for (let i = -8; i < 8; i++) { c.fillStyle = i % 2 ? '#ff5fa2' : '#ffd23f'; c.save(); c.rotate(-.5); c.fillRect(i * .12, -1, .12, 2); c.restore(); }
       c.fillStyle = '#fff'; for (const [x, y] of [[-.12, .15], [.1, -.05], [.15, .32], [-.02, -.25], [-.2, .4]]) { c.beginPath(); c.arc(x, y, .03, 0, 7); c.fill(); }
@@ -92,7 +147,7 @@
       c.fillStyle = '#fff'; for (let x = -.4; x <= .4; x += .1) { c.beginPath(); c.arc(x, .5, .065, 0, 7); c.fill(); }
       c.fillStyle = '#3bceac'; c.beginPath(); c.arc(0, -.52, .09, 0, 7); c.fill();
     } },
-    crown: { name: 'Crown', h: .66, face: { at: 'eyes', y: -1.8, s: 2 }, draw(c) {
+    crown: { name: 'Crown', theme: 'birthday', h: .66, face: { at: 'eyes', y: -1.8, s: 2 }, draw(c) {
       c.beginPath(); c.moveTo(-.5, .28); c.lineTo(-.5, -.18); c.lineTo(-.27, .03); c.lineTo(0, -.3); c.lineTo(.27, .03); c.lineTo(.5, -.18); c.lineTo(.5, .28); c.closePath();
       const g = c.createLinearGradient(0, -.3, 0, .3); g.addColorStop(0, '#ffe680'); g.addColorStop(1, '#e0a800');
       c.fillStyle = g; c.fill(); c.lineWidth = .03; c.strokeStyle = '#a07000'; c.lineJoin = 'round'; c.stroke();
@@ -100,7 +155,7 @@
       [['#e63946', -.3], ['#1d77ff', 0], ['#06d6a0', .3]].forEach(([col, x]) => { c.fillStyle = col; c.beginPath(); c.arc(x, .21, .045, 0, 7); c.fill(); });
       c.fillStyle = '#fff3b0'; [[-.5, -.18], [0, -.3], [.5, -.18]].forEach(([x, y]) => { c.beginPath(); c.arc(x, y, .045, 0, 7); c.fill(); });
     } },
-    tophat: { name: 'Top hat', h: .92, face: { at: 'eyes', y: -2.06, s: 2.4 }, draw(c) {
+    tophat: { name: 'Top hat', theme: 'newyear', h: .92, face: { at: 'eyes', y: -2.06, s: 2.4 }, draw(c) {
       c.fillStyle = '#1a1a1a'; c.fillRect(-.3, -.46, .6, .8);
       c.beginPath(); c.ellipse(0, -.46, .3, .06, 0, 0, 7); c.fillStyle = '#2d2d2d'; c.fill();
       c.fillStyle = '#d62828'; c.fillRect(-.3, .16, .6, .11);
@@ -119,7 +174,7 @@
       c.restore();
       c.beginPath(); rrect(c, -.08, -.1, .16, .2, .05); c.fillStyle = '#a4031f'; c.fill();
     } },
-    lips: { name: 'Lips', h: .5, face: { at: 'mouth', y: .02, s: .9 }, draw(c) {
+    lips: { name: 'Lips', theme: 'valentine', h: .5, face: { at: 'mouth', y: .02, s: .9 }, draw(c) {
       c.beginPath(); c.moveTo(-.5, 0);
       c.bezierCurveTo(-.35, -.23, -.14, -.26, 0, -.12); c.bezierCurveTo(.14, -.26, .35, -.23, .5, 0);
       c.bezierCurveTo(.3, .3, -.3, .3, -.5, 0); c.closePath();
@@ -127,7 +182,7 @@
       c.beginPath(); c.moveTo(-.46, .005); c.quadraticCurveTo(0, .07, .46, .005); c.lineWidth = .025; c.strokeStyle = '#8b0033'; c.stroke();
       c.fillStyle = 'rgba(255,255,255,.45)'; c.beginPath(); c.ellipse(.1, .13, .1, .03, -.1, 0, 7); c.fill();
     } },
-    bunny: { name: 'Bunny ears', h: 1.1, face: { at: 'eyes', y: -2.4, s: 2.4 }, draw(c) {
+    bunny: { name: 'Bunny ears', theme: 'easter', h: 1.1, face: { at: 'eyes', y: -2.4, s: 2.4 }, draw(c) {
       for (const s of [-1, 1]) {
         c.save(); c.translate(s * .22, -.08); c.rotate(s * .2);
         c.beginPath(); c.ellipse(0, 0, .15, .44, 0, 0, 7); c.fillStyle = '#fff'; c.fill(); c.lineWidth = .025; c.strokeStyle = '#ddd'; c.stroke();
@@ -143,19 +198,19 @@
       }
       c.beginPath(); c.ellipse(0, .24, .5, .1, 0, Math.PI, 0); c.lineWidth = .06; c.strokeStyle = '#2b2b2b'; c.stroke();
     } },
-    halo: { name: 'Halo', h: .34, face: { at: 'eyes', y: -2.3, s: 2.2 }, draw(c) {
+    halo: { name: 'Halo', theme: 'party', h: .34, face: { at: 'eyes', y: -2.3, s: 2.2 }, draw(c) {
       c.save(); c.shadowColor = '#ffe066'; c.shadowBlur = 20;
       c.beginPath(); c.ellipse(0, 0, .45, .12, 0, 0, 7); c.lineWidth = .08; c.strokeStyle = '#ffd23f'; c.stroke(); c.restore();
       c.beginPath(); c.ellipse(0, 0, .45, .12, 0, 0, 7); c.lineWidth = .03; c.strokeStyle = '#fff6c2'; c.stroke();
     } },
-    horns: { name: 'Devil horns', h: .5, face: { at: 'eyes', y: -1.85, s: 2.4 }, draw(c) {
+    horns: { name: 'Devil horns', theme: 'halloween', h: .5, face: { at: 'eyes', y: -1.85, s: 2.4 }, draw(c) {
       for (const s of [-1, 1]) {
         c.beginPath(); c.moveTo(s * .14, .2); c.quadraticCurveTo(s * .12, -.1, s * .42, -.24); c.quadraticCurveTo(s * .3, -.02, s * .36, .2); c.closePath();
         c.fillStyle = '#e5383b'; c.fill(); c.lineWidth = .02; c.strokeStyle = '#8d0801'; c.stroke();
       }
       c.beginPath(); c.ellipse(0, .22, .5, .08, 0, Math.PI, 0); c.lineWidth = .05; c.strokeStyle = '#8d0801'; c.stroke();
     } },
-    flowercrown: { name: 'Flower crown', h: .46, face: { at: 'eyes', y: -1.5, s: 2.5 }, draw(c) {
+    flowercrown: { name: 'Flower crown', theme: 'party', h: .46, face: { at: 'eyes', y: -1.5, s: 2.5 }, draw(c) {
       c.beginPath(); c.ellipse(0, .16, .48, .2, 0, Math.PI, 0); c.lineWidth = .03; c.strokeStyle = '#4f772d'; c.stroke();
       const cols = ['#ff8fab', '#ffd166', '#ffffff', '#cdb4db', '#ff8fab', '#ffd166', '#ffffff'];
       for (let i = 0; i < 7; i++) {
@@ -241,7 +296,7 @@
     p.draw(ctx, unit, text);
     ctx.restore();
   }
-  const LIST = Object.entries(P).filter(([, p]) => !p.text).map(([id, p]) => ({ id, name: p.name, h: p.h }));
+  const LIST = Object.entries(P).filter(([, p]) => !p.text).map(([id, p]) => ({ id, name: p.name, h: p.h, theme: p.theme || '' }));
   window.PBProps = {
     LIST, WORDS, EMOJI, draw,
     height: (id) => (P[id] ? P[id].h : 1),

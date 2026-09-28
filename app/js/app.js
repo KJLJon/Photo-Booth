@@ -239,39 +239,119 @@
     gold: ['#f5d06f', '#d4a017', '#fff3c4', '#e8b923'],
     dark: ['#1f1f1f', '#3a3a3a', '#555555']
   };
-  function decorate(ctx, W, H, r, kind, colors) {
-    const s = W / 900;
+  // 2–3 colour fades for "Your Colors"
+  const FADE_DIRS = [{ id: 'down', label: '⬇️ Down' }, { id: 'diag', label: '↘️ Corner' }, { id: 'diag2', label: '↙️ Other corner' },
+    { id: 'across', label: '➡️ Across' }, { id: 'radial', label: '🔘 From the middle' }];
+  function fade(ctx, W, H, cols, dir) {
+    let g;
+    if (dir === 'radial') g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.hypot(W, H) / 2);
+    else if (dir === 'across') g = ctx.createLinearGradient(0, 0, W, 0);
+    else if (dir === 'diag2') g = ctx.createLinearGradient(W, 0, 0, H);
+    else if (dir === 'diag') g = ctx.createLinearGradient(0, 0, W, H);
+    else g = ctx.createLinearGradient(0, 0, 0, H);
+    cols.forEach((c, i) => g.addColorStop(i / (cols.length - 1), c));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  const PALETTES = [
+    { name: 'Sunset', c: ['#ff9a8b', '#ff6a88', '#ffc796'] }, { name: 'Ocean', c: ['#2193b0', '#6dd5ed'] },
+    { name: 'Candy', c: ['#ff9a9e', '#fad0c4', '#fbc2eb'] }, { name: 'Mint', c: ['#a8edea', '#fed6e3'] },
+    { name: 'Lavender', c: ['#8ec5fc', '#e0c3fc'] }, { name: 'Peach', c: ['#ffecd2', '#fcb69f'] },
+    { name: 'Galaxy', c: ['#0f0c29', '#302b63', '#7a3d9c'] }, { name: 'Forest', c: ['#134e5e', '#71b280'] },
+    { name: 'Gold', c: ['#f7971e', '#ffd200'] }, { name: 'Berry', c: ['#8e2de2', '#4a00e0'] },
+    { name: 'Fire', c: ['#f12711', '#f5af19'] }, { name: 'Sky', c: ['#89f7fe', '#66a6ff'] },
+    { name: 'Blush', c: ['#ffdde1', '#ee9ca7'] }, { name: 'Night', c: ['#141e30', '#243b55'] },
+    { name: 'Rose gold', c: ['#b76e79', '#eacda3', '#e6b8a2'] }, { name: 'Pastel rainbow', c: ['#ff9a9e', '#fecfef', '#a1c4fd'] },
+    { name: 'Lemonade', c: ['#fff6b7', '#f6416c'] }, { name: 'Aqua', c: ['#13547a', '#80d0c7'] },
+    { name: 'Grape', c: ['#654ea3', '#eaafc8'] }, { name: 'Mono', c: ['#e0e0e0', '#8e8e8e'] }
+  ];
+  const DECOS = [
+    { id: 'none', label: 'Nothing' }, { id: 'confetti', label: '🎊 Confetti' }, { id: 'dots', label: '• Dots' }, { id: 'polka', label: '⚪ Polka' },
+    { id: 'stars', label: '⭐ Stars' }, { id: 'sparkles', label: '✨ Sparkles' }, { id: 'hearts', label: '💕 Hearts' }, { id: 'bokeh', label: '🔆 Bokeh' },
+    { id: 'bubbles', label: '🫧 Bubbles' }, { id: 'balloons', label: '🎈 Balloons' }, { id: 'snow', label: '❄️ Snow' }, { id: 'flowers', label: '🌸 Flowers' },
+    { id: 'stripes', label: '▧ Stripes' }, { id: 'rays', label: '☀️ Rays' }, { id: 'zigzag', label: '〰 Zigzag' }, { id: 'waves', label: '🌊 Waves' }
+  ];
+  function decorate(ctx, W, H, r, kind, colors, density) {
+    const s = W / 900, dn = density || 1;
+    const N = (k) => Math.max(1, Math.round(k * dn));
     const col = () => pick(r, colors);
     switch (kind) {
-      case 'confetti': confettiPieces(ctx, W, H, r, Math.round(W * H / 5500), colors, s); break;
+      case 'confetti': confettiPieces(ctx, W, H, r, N(W * H / 5500), colors, s); break;
       case 'dots':
-        for (let i = 0; i < Math.round(W * H / 9000); i++) {
+        for (let i = 0; i < N(W * H / 9000); i++) {
           ctx.fillStyle = col(); ctx.beginPath(); ctx.arc(r() * W, r() * H, (6 + r() * 16) * s, 0, Math.PI * 2); ctx.fill();
         }
         break;
       case 'stars':
-        for (let i = 0; i < Math.round(W * H / 16000); i++) { ctx.fillStyle = col(); star(ctx, r() * W, r() * H, (10 + r() * 22) * s, r() * Math.PI); }
+        for (let i = 0; i < N(W * H / 16000); i++) { ctx.fillStyle = col(); star(ctx, r() * W, r() * H, (10 + r() * 22) * s, r() * Math.PI); }
         break;
       case 'hearts':
-        for (let i = 0; i < Math.round(W * H / 14000); i++) { ctx.fillStyle = col(); heart(ctx, r() * W, r() * H, (12 + r() * 26) * s, (r() - .5) * .8); }
+        for (let i = 0; i < N(W * H / 14000); i++) { ctx.fillStyle = col(); heart(ctx, r() * W, r() * H, (12 + r() * 26) * s, (r() - .5) * .8); }
         break;
       case 'balloons':
-        for (let i = 0; i < Math.round(H / 110); i++) {
+        for (let i = 0; i < N(H / 110); i++) {
           const edge = r() < 0.5 ? r() * W * 0.14 : W - r() * W * 0.14;
           balloon(ctx, r() < 0.75 ? edge : r() * W, r() * H, (34 + r() * 36) * s, col());
         }
         break;
       case 'snow':
-        for (let i = 0; i < Math.round(W * H / 4000); i++) {
+        for (let i = 0; i < N(W * H / 4000); i++) {
           ctx.fillStyle = col(); ctx.beginPath(); ctx.arc(r() * W, r() * H, (1.5 + r() * 3) * s, 0, Math.PI * 2); ctx.fill();
         }
-        for (let i = 0; i < Math.round(W * H / 20000); i++) { ctx.strokeStyle = col(); snowflake(ctx, r() * W, r() * H, (12 + r() * 24) * s, 3 * s); }
+        for (let i = 0; i < N(W * H / 20000); i++) { ctx.strokeStyle = col(); snowflake(ctx, r() * W, r() * H, (12 + r() * 24) * s, 3 * s); }
         break;
       case 'sparkles':
-        for (let i = 0; i < Math.round(W * H / 12000); i++) { ctx.fillStyle = col(); sparkle(ctx, r() * W, r() * H, (6 + r() * 16) * s); }
+        for (let i = 0; i < N(W * H / 12000); i++) { ctx.fillStyle = col(); sparkle(ctx, r() * W, r() * H, (6 + r() * 16) * s); }
         break;
+      case 'polka': {
+        const step = W / Math.max(3, Math.round(7 * dn)), rad = step * .22; let row = 0;
+        for (let y = step / 2; y < H + step; y += step * .866, row++) for (let x = (row % 2 ? step / 2 : 0); x < W + step; x += step) {
+          ctx.fillStyle = col(); ctx.globalAlpha = .85; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1; break;
+      }
+      case 'bokeh':
+        for (let i = 0; i < N(W * H / 30000); i++) {
+          const x = r() * W, y = r() * H, R = (20 + r() * 70) * s, g = ctx.createRadialGradient(x, y, 0, x, y, R), c = col();
+          g.addColorStop(0, c); g.addColorStop(.7, c); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.globalAlpha = .18 + r() * .3; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1; break;
+      case 'bubbles':
+        for (let i = 0; i < N(W * H / 22000); i++) {
+          const x = r() * W, y = r() * H, R = (10 + r() * 40) * s;
+          ctx.strokeStyle = col(); ctx.globalAlpha = .7; ctx.lineWidth = 3 * s; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = '#ffffff'; ctx.globalAlpha = .6; ctx.beginPath(); ctx.ellipse(x - R * .35, y - R * .4, R * .2, R * .12, -.6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1; break;
+      case 'stripes': {
+        const sw = W / Math.max(4, Math.round(10 * dn));
+        ctx.save(); ctx.globalAlpha = .22; ctx.translate(W / 2, H / 2); ctx.rotate(-Math.PI / 4);
+        const L = Math.hypot(W, H);
+        for (let x = -L, i = 0; x < L; x += sw * 2, i++) { ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(x, -L, sw, L * 2); }
+        ctx.restore(); break;
+      }
+      case 'rays': {
+        const n = Math.max(8, Math.round(24 * dn)), cx = W / 2, cy = H * .35, R = Math.hypot(W, H);
+        ctx.globalAlpha = .18;
+        for (let k = 0; k < n; k++) { const a0 = k * Math.PI * 2 / n, a1 = a0 + Math.PI / n; ctx.fillStyle = colors[k % colors.length];
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a0) * R, cy + Math.sin(a0) * R); ctx.lineTo(cx + Math.cos(a1) * R, cy + Math.sin(a1) * R); ctx.fill(); }
+        ctx.globalAlpha = 1; break;
+      }
+      case 'zigzag': case 'waves': {
+        const gap = H / Math.max(4, Math.round(12 * dn)), amp = gap * .28, wl = W / 10;
+        ctx.lineWidth = 7 * s; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.globalAlpha = .45;
+        for (let y = gap / 2, i = 0; y < H + gap; y += gap, i++) {
+          ctx.strokeStyle = colors[i % colors.length]; ctx.beginPath();
+          for (let x = -wl; x <= W + wl; x += kind === 'zigzag' ? wl / 2 : wl / 8) {
+            const yy = kind === 'zigzag' ? y + ((Math.round(x / (wl / 2)) % 2) ? amp : -amp) : y + Math.sin(x / wl * Math.PI * 2) * amp;
+            x === -wl ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+          }
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1; break;
+      }
       case 'flowers':
-        for (let i = 0; i < Math.round(W * H / 20000); i++) flower(ctx, r() * W, r() * H, (14 + r() * 20) * s, col(), r() * 6);
+        for (let i = 0; i < N(W * H / 20000); i++) flower(ctx, r() * W, r() * H, (14 + r() * 20) * s, col(), r() * 6);
         break;
     }
   }
@@ -548,12 +628,13 @@
       } },
     minblack: { name: 'Simple Black', accent: '#000000',
       draw(ctx, W, H) { ctx.fillStyle = '#141414'; ctx.fillRect(0, 0, W, H); } },
-    custom: { name: 'Your Colors', custom: true,
+    custom: { name: 'Your Colors & Fade', custom: true,
       get accent() { return shade(state.custom.c2, -0.45); },
       draw(ctx, W, H, r) {
-        const c = state.custom;
-        vGrad(ctx, W, H, [c.c1, c.c2], true);
-        if (c.deco !== 'none') decorate(ctx, W, H, r, c.deco, DECO_COLORS[c.decoColor] || DECO_COLORS.bright);
+        const c = state.custom, cols = c.use3 && c.c3 ? [c.c1, c.c2, c.c3] : [c.c1, c.c2];
+        fade(ctx, W, H, cols, c.dir || 'diag');
+        const dc = c.decoColor === 'match' ? cols.map(x => shade(x, .35)).concat(['#ffffff']) : (DECO_COLORS[c.decoColor] || DECO_COLORS.bright);
+        if (c.deco !== 'none') decorate(ctx, W, H, r, c.deco, dc, c.density || 1);
       } },
     photo: { name: 'Your Photo', accent: '#000000',
       draw(ctx, W, H) {
@@ -627,18 +708,19 @@
     iconLeft: '🎈', iconRight: '🎂', iconPos: 'sub',
     frame: 'white', frameColor: '#ffffff', frameSize: 1, shadow: true,
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
-    custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
+    custom: { c1: '#ff9a8b', c2: '#7f53ac', c3: '#ffd6a5', use3: false, dir: 'diag', deco: 'confetti', decoColor: 'bright', density: 1 },
     bgDim: 0.2, preset: 0,
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
-    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur'
+    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo', stamp: 'off', stampDate: '', cuts: [],
+    vidFrame: { zoom: 1, cx: null, cy: null }, vidCrop: { x: .5, y: .5, z: 1 }
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode', 'stamp', 'stampDate', 'cuts', 'vidFrame', 'vidCrop'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -687,8 +769,8 @@
     { id: 'c-center', label: '🎯 Center' },
     { id: 'c-film', label: '🎞️ Film' },
     { id: 'c-scatter', label: '📷 Scattered' }
-  ];
-  const isCollage = (id) => /^c-/.test(id || state.layout);
+  ].concat((window.PBCollage ? PBCollage.TEMPLATES : []).map(t => ({ id: t.id, label: t.label })), [{ id: 'c-custom', label: '✂️ Your own cuts' }]);
+  const isCollage = (id) => /^[cp]-/.test(id || state.layout);
 
   const LAYOUTS = [
     { id: 'strip', label: '📏 Strip' },
@@ -807,6 +889,19 @@
     const W = Math.round(Z.w * k), H = Math.round(Z.h * k), m = Math.min(W, H);
     const gap = m * (state.collageGap == null ? .025 : state.collageGap), cap = state.caption ? Math.round(H * (H > W ? .14 : .2)) : 0;
     const box = { x: gap, y: gap, w: W - 2 * gap, h: H - 2 * gap - cap };
+    // angled pieces (js/collage.js): polygons cut from the box, each shrunk to leave the gaps
+    const pcs = window.PBCollage && PBCollage.pieces(kind, n, rowsFor, state.cuts);
+    if (pcs && pcs.length) {
+      const toPx = ([x, y]) => [box.x + x * box.w, box.y + y * box.h];
+      const onEdge = (a, b) => ['x', 'y'].some((k, d) => [box[k], box[k] + (d ? box.h : box.w)].some(v => Math.abs(a[d] - v) < .5 && Math.abs(b[d] - v) < .5));
+      const rects = pcs.slice(0, Math.max(n, 1)).map(poly => {
+        const pts = PBCollage.shrink(poly.map(toPx), gap / 2, 0, onEdge);
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        pts.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); });
+        return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, poly: pts };
+      });
+      return { W, H, rects, box, border: m * .012, cap: cap ? { x: 0, y: H - cap - gap / 2, w: W, h: cap } : null, collage: true };
+    }
     const scatter = kind === 'c-scatter';
     // cells touching the edge keep the full outer margin; shared edges get half a gap each side
     const rects = cellsFor(kind, n, box.w / box.h).map(c => {
@@ -1011,6 +1106,18 @@
     if (!p._sw || p._sw.key !== k) p._sw = { key: k, canvas: composeSwap(src, p._mask) };
     return p._sw.canvas;
   }
+  // ---- the orange 2000s date stamp (js/datestamp.js) ----
+  function stampText() {
+    if (!state.stamp || state.stamp === 'off') return '';
+    const d = state.stampDate ? new Date(state.stampDate + 'T' + new Date().toTimeString().slice(0, 8)) : new Date();
+    return PBStamp.text(state.stamp, isNaN(d) ? new Date() : d);
+  }
+  function buildStampChips() {
+    chipGroup($('stampChips'), PBStamp.STYLES, s => (state.stamp || 'off') === s.id, s => { state.stamp = s.id; buildStampChips(); schedule(); });
+    $('stampDateRow').hidden = !state.stamp || state.stamp === 'off';
+    $('stampDate').value = state.stampDate || '';
+  }
+
   // ---- face paint (js/facepaint.js), placed with the detailed face finder ----
   const paintOn = () => state.facePaint && state.facePaint !== 'none';
   function paintFaces(p, src, key) {
@@ -1036,6 +1143,8 @@
   function buildPaintChips() {
     chipGroup($('paintChips'), PBPaint.EFFECTS, e => (state.facePaint || 'none') === e.id, e => setPaint(e.id));
   }
+  $('stampDate').addEventListener('change', (e) => { state.stampDate = e.target.value; schedule(); });
+  $('stampToday').addEventListener('click', () => { state.stampDate = ''; buildStampChips(); schedule(); });
   function buildSwapChips() {
     chipGroup($('swapChips'), SCENES, s => state.bgSwap === s.id, s => {
       if (s.id === 'custom' && !swapImage) { $('swapFile').click(); return; }
@@ -1061,8 +1170,11 @@
 
   function drawPhoto(ctx, p, rect, jit, border, idx, rng) {
     const style = state.style;
-    const card = usesCard();
+    const card = usesCard() && !rect.poly;
     const shape = state.shape;
+    // angled collage pieces: the photo is clipped to the polygon (in coordinates around the photo's centre)
+    const polyL = rect.poly ? rect.poly.map(([x, y]) => [x - rect.x - rect.w / 2, y - rect.y - rect.h / 2]) : null;
+    const polyPath = () => { polyL.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
     let fill = frameFill();
     let b = fill ? border * state.frameSize : 0;
     if (card && style === 'polaroid') { fill = fill || '#ffffff'; b = Math.max(b, border); }
@@ -1070,7 +1182,7 @@
     const ir = innerRect(rect, border);
     const px = -ir.w / 2, py = -rect.h / 2;              // photo box, top-left
     const photoR = shape === 'rounded' ? Math.min(ir.w, ir.h) * 0.08 : 0;
-    const curvy = shape !== 'rect' && shape !== 'rounded';     // frame follows the outline instead of a box
+    const curvy = !!polyL || (shape !== 'rect' && shape !== 'rounded');     // frame follows the outline instead of a box
 
     ctx.save();
     ctx.translate(rect.x + rect.w / 2 + jit.dx, rect.y + rect.h / 2 + jit.dy);
@@ -1088,6 +1200,8 @@
       const side = style === 'film' ? b + border * 2.2 : b;
       const cardR = style === 'film' ? border * 0.4 : border * 0.5;
       shapePath(ctx, 'rect', -rect.w / 2 - side, -rect.h / 2 - b, rect.w + 2 * side, rect.h + 2 * b, cardR);
+    } else if (polyL) {
+      polyPath();
     } else if (curvy) {
       shapePath(ctx, shape, px, py, ir.w, ir.h, 0);
     } else {
@@ -1116,12 +1230,14 @@
     // the photo, clipped to its shape
     ctx.save();
     ctx.beginPath();
-    shapePath(ctx, card ? 'rect' : shape, px, py, ir.w, ir.h, photoR);
+    if (polyL) polyPath(); else shapePath(ctx, card ? 'rect' : shape, px, py, ir.w, ir.h, photoR);
     ctx.clip();
     if (p) {
       const c = cropFor(p, ir.w / ir.h);
       const src = photoSource(p), k = src.width / p.canvas.width;
       ctx.drawImage(src, c.sx * k, c.sy * k, c.sw * k, c.sh * k, px, py, ir.w, ir.h);
+      const st = stampText();                                  // in the corner of the part that shows
+      if (st) { ctx.save(); ctx.translate(px, py); PBStamp.draw(ctx, ir.w, ir.h, st); ctx.restore(); }
     } else {
       ctx.fillStyle = '#efe6f7';
       ctx.fillRect(px, py, ir.w, ir.h);
@@ -1409,7 +1525,7 @@
 
   // ---- my designs: everything except the photos, saved on this device ----
   const DESIGNS_KEY = 'photobooth-designs-v1';
-  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone', 'lastCollage', 'lastBooth', 'boothStash'].includes(k)).concat('camProps');
+  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone', 'lastCollage', 'lastBooth', 'boothStash', 'vidFrame', 'vidCrop'].includes(k)).concat('camProps');
   function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { if (state[k] !== undefined) d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
   function applyDesign(d) {
     DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
@@ -1556,7 +1672,8 @@
     const col = isCollage();
     chipGroup($('boothMode'), [{ id: false, label: '🎞️ Photo booth' }, { id: true, label: '▦ Collage' }], m => col === m.id,
       m => selectLayout(m.id ? (state.lastCollage || 'c-grid') : (state.lastBooth || 'strip')));
-    const opts = col ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ label: String(n), n })) : [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }];
+    const opts = state.layout === 'c-custom' ? [{ label: `${state.count} (from your cuts)`, n: state.count }]
+      : col ? [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ label: String(n), n })) : [{ label: '3 photos', n: 3 }, { label: '4 photos', n: 4 }];
     chipGroup($('counts'), opts, it => state.count === it.n, it => {
       state.count = it.n; buildCounts(); buildSlots(); schedule();
     });
@@ -1586,7 +1703,10 @@
   }
   function buildLayouts() {
     chipGroup($('layouts'), LAYOUTS, it => state.layout === it.id, it => selectLayout(it.id));
-    chipGroup($('collages'), COLLAGES, it => state.layout === it.id, it => selectLayout(it.id));
+    chipGroup($('collages'), COLLAGES.filter(c => c.id !== 'p-diamond' || state.count === 5 || state.layout === c.id), it => state.layout === it.id, it => {
+      if (it.id === 'c-custom') { openCutEditor(); return; }
+      selectLayout(it.id);
+    });
     $('collageOpts').hidden = !isCollage();
     chipGroup($('collageSizes'), SIZES, z => state.collageSize === z.id, z => { state.collageSize = z.id; buildLayouts(); schedule(); });
     [...$('collageSizes').children].forEach((b, i) => { b.title = SIZES[i].hint; });
@@ -1595,6 +1715,98 @@
     chipGroup($('styles'), STYLES, it => state.style === it.id, it => { state.style = it.id; buildLayouts(); schedule(); });
     chipGroup($('shapes'), SHAPES, it => state.shape === it.id, it => { state.shape = it.id; buildLayouts(); schedule(); });
   }
+  // ---- ✂️ cut editor: drag lines across the collage; each cut splits the pieces it crosses ----
+  const cutEd = { cuts: [], drag: null, view: null };
+  const cutCv = $('cutCanvas');
+  function openCutEditor() {
+    if (!isCollage()) selectLayout('c-grid');
+    cutEd.cuts = state.layout === 'c-custom' ? state.cuts.slice() : [];
+    if (!cutEd.cuts.length) fromCurrent();
+    applyCuts();                                               // the collage becomes "your own cuts" straight away
+    $('cutEd').hidden = false; syncScroll();
+    requestAnimationFrame(drawCutEd);
+  }
+  function fromCurrent() {
+    const cuts = PBCollage.cutsOf(state.layout, state.count, rowsFor);
+    if (cuts) { cutEd.cuts = cuts.map(c => c.slice()); return; }
+    // grid-style layouts: rebuild them from straight cuts (rows, then columns in each row)
+    const r = rowsFor(Math.max(1, state.count), false), R = r.length, out = [];
+    for (let i = 1; i < R; i++) out.push([-.1, i / R, 1.1, i / R]);
+    r.forEach((c, i) => { for (let j = 1; j < c; j++) out.push([j / c, i / R + .02, j / c, (i + 1) / R - .02]); });
+    cutEd.cuts = out;
+  }
+  function applyCuts() {
+    state.cuts = cutEd.cuts.map(c => c.map(v => Math.round(v * 1e4) / 1e4));
+    const n = PBCollage.fromCuts(state.cuts).length;
+    if (state.layout !== 'c-custom') selectLayout('c-custom');
+    state.count = clamp(n, 1, MAX_PHOTOS); buildCounts(); buildSlots(); buildLayouts(); schedule();
+  }
+  function cutView() {
+    const dpr = window.devicePixelRatio || 1, cw = cutCv.clientWidth, ch = cutCv.clientHeight;
+    if (cutCv.width !== Math.round(cw * dpr) || cutCv.height !== Math.round(ch * dpr)) { cutCv.width = Math.round(cw * dpr); cutCv.height = Math.round(ch * dpr); }
+    const L = computeLayout(state.layout, state.count), k = Math.min((cw - 24) / L.W, (ch - 24) / L.H);
+    return { dpr, cw, ch, L, k, x: (cw - L.W * k) / 2, y: (ch - L.H * k) / 2 };
+  }
+  function drawCutEd() {
+    if ($('cutEd').hidden) return;
+    const V = cutEd.view = cutView(), ctx = cutCv.getContext('2d');
+    ctx.setTransform(V.dpr, 0, 0, V.dpr, 0, 0); ctx.clearRect(0, 0, V.cw, V.ch);
+    const base = document.createElement('canvas'); composeInto(base, false);
+    ctx.drawImage(base, V.x, V.y, V.L.W * V.k, V.L.H * V.k);
+    // the pieces these cuts make, outlined and numbered
+    const box = V.L.box || { x: 0, y: 0, w: V.L.W, h: V.L.H };
+    const toV = ([x, y]) => [V.x + (box.x + x * box.w) * V.k, V.y + (box.y + y * box.h) * V.k];
+    const pcs = PBCollage.fromCuts(cutEd.cuts);
+    ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.strokeStyle = '#ff5fa2';
+    pcs.forEach((poly, i) => {
+      ctx.beginPath(); poly.map(toV).forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke();
+      const [cx, cy] = toV(PBCollage.centroid(poly));
+      ctx.setLineDash([]); ctx.fillStyle = 'rgba(20,10,31,.75)'; ctx.beginPath(); ctx.arc(cx, cy, 14, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(i + 1, cx, cy);
+      ctx.setLineDash([6, 5]);
+    });
+    if (cutEd.drag) {
+      const [a, b] = cutEd.drag.map(toV);
+      ctx.setLineDash([]); ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f';
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    $('cutSub').textContent = `${pcs.length} piece${pcs.length === 1 ? '' : 's'} · drag across to cut · up to 9`;
+    $('cutUndo').disabled = !cutEd.cuts.length;
+  }
+  function cutPoint(e) {
+    const V = cutEd.view, b = cutCv.getBoundingClientRect(), box = V.L.box || { x: 0, y: 0, w: V.L.W, h: V.L.H };
+    return [((e.clientX - b.left - V.x) / V.k - box.x) / box.w, ((e.clientY - b.top - V.y) / V.k - box.y) / box.h];
+  }
+  function snapped(a, b) {
+    if (!$('cutSnap').checked) return b;
+    const box = cutEd.view.L.box || { w: 1, h: 1 }, dx = (b[0] - a[0]) * box.w, dy = (b[1] - a[1]) * box.h, L = Math.hypot(dx, dy);
+    const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12);
+    return [a[0] + Math.cos(ang) * L / box.w, a[1] + Math.sin(ang) * L / box.h];
+  }
+  cutCv.addEventListener('pointerdown', (e) => { cutCv.setPointerCapture(e.pointerId); const p = cutPoint(e); cutEd.drag = [p, p]; drawCutEd(); });
+  cutCv.addEventListener('pointermove', (e) => { if (!cutEd.drag) return; cutEd.drag[1] = snapped(cutEd.drag[0], cutPoint(e)); drawCutEd(); });
+  cutCv.addEventListener('pointerup', () => {
+    const d = cutEd.drag; cutEd.drag = null;
+    if (!d) return;
+    const [a, b] = d, L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (L < .04) { drawCutEd(); return; }
+    // stretch the drawn line a little past its ends so a cut from edge to edge goes all the way
+    const ex = (b[0] - a[0]) / L * .03, ey = (b[1] - a[1]) / L * .03;
+    const next = cutEd.cuts.concat([[a[0] - ex, a[1] - ey, b[0] + ex, b[1] + ey]]);
+    if (PBCollage.fromCuts(next).length > MAX_PHOTOS) { toast('That would make more than 9 pieces'); drawCutEd(); return; }
+    cutEd.cuts = next; applyCuts(); drawCutEd();
+  });
+  $('cutUndo').addEventListener('click', () => { cutEd.cuts.pop(); applyCuts(); drawCutEd(); });
+  $('cutClear').addEventListener('click', () => { cutEd.cuts = []; applyCuts(); drawCutEd(); });
+  $('cutFrom').addEventListener('click', () => {
+    const was = state.layout; if (was === 'c-custom') { toast('Pick a layout first, then start from it'); return; }
+    fromCurrent(); applyCuts(); drawCutEd();
+  });
+  $('cutDone').addEventListener('click', () => { $('cutEd').hidden = true; syncScroll(); applyCuts(); });
+  $('cutOpen').addEventListener('click', openCutEditor);
+  window.addEventListener('resize', () => requestAnimationFrame(drawCutEd));
+
   $('collageGap').addEventListener('input', (e) => { state.collageGap = +e.target.value; schedule(); });
   $('collageCaption').addEventListener('change', (e) => { state.caption = e.target.checked; schedule(); });
   function buildFonts() {
@@ -1684,8 +1896,7 @@
     $('edge').value = state.edge;
     $('edgeColor').value = state.edge === 'custom' ? state.edgeColor : (EDGE_COLORS[state.edge] || '#ffffff');
     $('edgeSize').value = state.edgeSize;
-    $('c1').value = state.custom.c1; $('c2').value = state.custom.c2;
-    $('deco').value = state.custom.deco; $('decoColor').value = state.custom.decoColor;
+    syncCustom();
     $('bgDim').value = state.bgDim;
     buildPresets(); buildCounts(); buildLayouts(); buildFonts(); markThemes(); markIconBox(); buildSlots();
   }
@@ -1750,8 +1961,24 @@
   const customChanged = () => { drawThumb('custom'); if (state.outlineMode === 'auto') $('outlineColor').value = THEMES.custom.accent; schedule(); };
   $('c1').addEventListener('input', (e) => { state.custom.c1 = e.target.value; customChanged(); });
   $('c2').addEventListener('input', (e) => { state.custom.c2 = e.target.value; customChanged(); });
-  $('deco').addEventListener('change', (e) => { state.custom.deco = e.target.value; customChanged(); });
+  $('c3').addEventListener('input', (e) => { state.custom.c3 = e.target.value; state.custom.use3 = true; $('use3').checked = true; customChanged(); });
+  $('use3').addEventListener('change', (e) => { state.custom.use3 = e.target.checked; customChanged(); });
   $('decoColor').addEventListener('change', (e) => { state.custom.decoColor = e.target.value; customChanged(); });
+  $('decoDensity').addEventListener('input', (e) => { state.custom.density = +e.target.value; customChanged(); });
+  function buildCustomPanel() {
+    const c = state.custom;
+    chipGroup($('palettes'), PALETTES, p => p.c[0] === c.c1 && p.c[1] === c.c2, p => {
+      Object.assign(c, { c1: p.c[0], c2: p.c[1], c3: p.c[2] || c.c3, use3: !!p.c[2] }); syncCustom(); customChanged();
+    }, (b, p) => { b.style.background = `linear-gradient(120deg, ${p.c.join(', ')})`; });
+    chipGroup($('fadeDirs'), FADE_DIRS, d => (c.dir || 'diag') === d.id, d => { c.dir = d.id; buildCustomPanel(); customChanged(); });
+    chipGroup($('decos'), DECOS, d => c.deco === d.id, d => { c.deco = d.id; buildCustomPanel(); customChanged(); });
+  }
+  function syncCustom() {
+    const c = state.custom;
+    $('c1').value = c.c1; $('c2').value = c.c2; $('c3').value = c.c3 || '#ffd6a5'; $('use3').checked = !!c.use3;
+    $('decoColor').value = c.decoColor; $('decoDensity').value = c.density || 1;
+    buildCustomPanel();
+  }
 
   $('bgFile').addEventListener('change', async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -1774,7 +2001,7 @@
     if (state.outlineMode === 'auto') $('outlineColor').value = theme.accent;
   });
 
-  $('jump').addEventListener('click', () => $('previewSection').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  $('jump').addEventListener('click', () => $(state.appMode === 'video' ? 'videoSection' : 'previewSection').scrollIntoView({ behavior: 'smooth', block: 'start' }));
 
   // ================= save =================
   let toastTimer;
@@ -1786,7 +2013,7 @@
   }
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
   const isAndroid = /Android/i.test(navigator.userAgent);
-  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery'];
+  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery', 'cutEd'];
   function syncScroll() { document.body.style.overflow = OVERLAYS.some(id => !$(id).hidden) ? 'hidden' : ''; }
   function stamp() {
     const d = new Date(), pad = (n) => String(n).padStart(2, '0');
@@ -1827,6 +2054,7 @@
     const cv = document.createElement('canvas'); cv.width = Math.round(c.sw); cv.height = Math.round(c.sh);
     const ctx = cv.getContext('2d');
     ctx.drawImage(src, c.sx * ks, c.sy * ks, c.sw * ks, c.sh * ks, 0, 0, cv.width, cv.height);
+    const stt = stampText(); if (stt) PBStamp.draw(ctx, cv.width, cv.height, stt);
     const list = curStickers();
     if (list.length) {
       ctx.save(); T.toPhoto(ctx, cv.width / c.sw, c.sx, c.sy);
@@ -1837,10 +2065,10 @@
   }
   const toJpeg = (cv) => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
   // Resize a finished picture to a social-media size: fit inside (edges blurred / white / black) or crop to fill.
-  function fitInto(ctx, src, W, H, fit, scratch) {
+  function fitInto(ctx, src, W, H, fit, scratch, crop) {
     const sw = src.width, sh = src.height;
     if (fit === 'fill') {
-      const k = Math.max(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k); return;
+      const f = cropFrame(sw, sh, W, H, crop); ctx.drawImage(src, -f.x * f.k, -f.y * f.k, sw * f.k, sh * f.k); return;
     }
     if (fit === 'blur') {
       const t = scratch || document.createElement('canvas'); t.width = 24; t.height = Math.max(1, Math.round(24 * H / W));
@@ -1851,11 +2079,85 @@
     } else { ctx.fillStyle = fit === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, W, H); }
     const k = Math.min(W / sw, H / sh); ctx.drawImage(src, (W - sw * k) / 2, (H - sh * k) / 2, sw * k, sh * k);
   }
-  function toSocial(src, id, fit) {
+  function toSocial(src, id, fit, crop) {
     if (!id || id === 'orig') return src;
     const Z = sizeOf(id), cv = document.createElement('canvas'); cv.width = Z.w; cv.height = Z.h;
-    fitInto(cv.getContext('2d'), src, Z.w, Z.h, fit);
+    fitInto(cv.getContext('2d'), src, Z.w, Z.h, fit, null, crop);
     return cv;
+  }
+  // "Crop to fill": which part of the picture is kept. crop = { x, y } (0…1: left/top → right/bottom of
+  // the spare room) and z (zoom, 1 = as big as fits). Returns the kept area in picture pixels and its scale.
+  const CROP0 = { x: .5, y: .5, z: 1 };
+  function cropFrame(sw, sh, W, H, crop) {
+    const c = crop || CROP0, k = Math.max(W / sw, H / sh) * (c.z || 1), w = W / k, h = H / k;
+    return { x: (sw - w) * c.x, y: (sh - h) * c.y, w, h, k };
+  }
+  // The whole picture with a frame on it: drag the frame (or the picture) to choose what's kept,
+  // pinch / scroll to zoom in. cv._crop remembers what's shown so the pointer code can move it.
+  function drawCropView(cv, src, W, H, crop) {
+    const k0 = Math.min(1, 720 / Math.max(src.width, src.height));
+    cv.width = Math.round(src.width * k0); cv.height = Math.round(src.height * k0);
+    const c = cv.getContext('2d'), f = cropFrame(src.width, src.height, W, H, crop);
+    const fx = f.x * k0, fy = f.y * k0, fw = f.w * k0, fh = f.h * k0, lw = Math.max(2, cv.width / 180);
+    c.drawImage(src, 0, 0, cv.width, cv.height);
+    c.fillStyle = 'rgba(20,10,31,.62)'; c.beginPath(); c.rect(0, 0, cv.width, cv.height); c.rect(fx, fy, fw, fh); c.fill('evenodd');
+    c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = lw / 2; c.beginPath();
+    for (const t of [1 / 3, 2 / 3]) { c.moveTo(fx + fw * t, fy); c.lineTo(fx + fw * t, fy + fh); c.moveTo(fx, fy + fh * t); c.lineTo(fx + fw, fy + fh * t); }
+    c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = lw; c.strokeRect(fx, fy, fw, fh);
+    const L = Math.min(fw, fh) * .12; c.lineWidth = lw * 2.2; c.beginPath();       // corner marks
+    [[fx, fy, 1, 1], [fx + fw, fy, -1, 1], [fx, fy + fh, 1, -1], [fx + fw, fy + fh, -1, -1]].forEach(([x, y, a, b]) => { c.moveTo(x + a * L, y); c.lineTo(x, y); c.lineTo(x, y + b * L); });
+    c.stroke();
+    cv._crop = { src, W, H, crop, k0 };
+  }
+  // pointer / wheel handling for a crop view; get() returns the crop object to change, done() runs after a change
+  function cropControls(cv, redraw, done) {
+    const pts = new Map(); let pinch0 = 0, z0 = 1, wheelT = 0;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const scale = () => cv.getBoundingClientRect().width / cv.width;
+    function move(dx, dy) {
+      const C = cv._crop; if (!C) return;
+      const f = cropFrame(C.src.width, C.src.height, C.W, C.H, C.crop), k = C.k0 * scale();
+      const rx = C.src.width - f.w, ry = C.src.height - f.h;
+      if (rx > 1) C.crop.x = clamp((f.x + dx / k) / rx, 0, 1);
+      if (ry > 1) C.crop.y = clamp((f.y + dy / k) / ry, 0, 1);
+    }
+    cv.addEventListener('pointerdown', (e) => {
+      if (!cv._crop) return;
+      cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); z0 = cv._crop.crop.z || 1; }
+      e.preventDefault();
+    });
+    cv.addEventListener('pointermove', (e) => {
+      const p = pts.get(e.pointerId); if (!p || !cv._crop) return;
+      if (pts.size === 1) move(e.clientX - p.x, e.clientY - p.y);
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()]; cv._crop.crop.z = clamp(z0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch0, 1, 4); }
+      redraw();
+    });
+    const up = (e) => { if (!pts.delete(e.pointerId)) return; if (pts.size < 2) pinch0 = 0; if (!pts.size) done(); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => {
+      if (!cv._crop) return; e.preventDefault();
+      const c = cv._crop.crop; c.z = clamp((c.z || 1) * Math.exp(-e.deltaY * .0015), 1, 4); redraw();
+      clearTimeout(wheelT); wheelT = setTimeout(done, 250);
+    }, { passive: false });
+  }
+  // the size picker on the save screen: a little shape for each size so you can see how tall / wide it is
+  const FITS = [{ id: 'blur', label: '🌫️ Blur edges' }, { id: 'white', label: '⬜ White' }, { id: 'black', label: '⬛ Black' }, { id: 'fill', label: '✂️ Crop to fill' }];
+  function buildSizeChips(el, value, origRatio, onPick) {
+    el.innerHTML = '';
+    [{ id: 'orig', label: 'Original', w: origRatio, h: 1 }].concat(SIZES).forEach(z => {
+      const b = document.createElement('button'), r = z.w / z.h, box = 26;
+      b.type = 'button'; b.dataset.size = z.id; b.setAttribute('aria-pressed', String(z.id === value));
+      b.title = z.hint ? `${z.w}×${z.h} · ${z.hint}` : 'The size it was made at';
+      const sh = document.createElement('span'); sh.className = 'shape' + (z.id === 'orig' ? ' orig' : '');
+      sh.style.width = Math.round(box * Math.min(1, r)) + 'px'; sh.style.height = Math.round(box * Math.min(1, 1 / r)) + 'px';
+      b.append(sh, z.label.replace(/^\S+ /, ''));
+      b.addEventListener('click', () => onPick(z.id));
+      el.appendChild(b);
+    });
+    const on = el.querySelector('[aria-pressed="true"]'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   function fillSizeSelect(sel, value) {
     if (!sel.options.length) {
@@ -1884,11 +2186,17 @@
     } else fit(36, 36, W - 72, H - 72);
     return cv;
   }
-  const save = { mode: 'booth', pick: 0, strip: null, photos: [] };
+  // Every size made on the save screen is kept (per size & fit), so flipping between them is instant.
+  const save = { mode: 'booth', pick: 0, strip: null, photos: [], strips: {}, photoSets: {}, crops: {}, srcs: {} };
+  const cropping = () => save.mode !== 'print' && state.saveSize !== 'orig' && state.saveFit === 'fill';
+  const sizeKey = () => state.saveSize === 'orig' ? 'orig' : state.saveSize + '|' + state.saveFit + (cropping() ? '|' + JSON.stringify(save.crops) : '');
+  const saveCropOf = (which) => save.crops[which] || (save.crops[which] = { ...CROP0 });
+  const photoSrc = (i) => save.srcs[i] || (save.srcs[i] = composePhotoOnly(i));
   async function buildSaveSheet() {
-    const name = `photobooth-${save.stamp}`;
+    const name = `photobooth-${save.stamp}`, key = sizeKey();
+    save.strip = save.strips[key] || null; save.photos = save.photoSets[key] || [];
     if (save.mode === 'booth') {
-      if (!save.strip) { render(); save.strip = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit)); }
+      if (!save.strip) { render(); save.strip = save.strips[key] = await toJpeg(toSocial(canvas, state.saveSize, state.saveFit, saveCropOf('booth'))); }
       if (!save.strip) { toast('Could not create the image'); return; }
       showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
     } else if (save.mode === 'print') {
@@ -1898,7 +2206,7 @@
         'Print at 4×6 in (10×15 cm), "fit to page" off, on a printer or at a photo kiosk.', true);
     } else {
       const idx = filledIdx();
-      if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(composePhotoOnly(i), state.saveSize, state.saveFit))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
+      if (!save.photos.length) save.photos = save.photoSets[key] = await Promise.all(idx.map(async i => new File([await toJpeg(toSocial(photoSrc(i), state.saveSize, state.saveFit, saveCropOf(i)))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
       save.pick = Math.min(save.pick, save.photos.length - 1);
       const f = save.photos[save.pick];
       showSaveSheet(f, f.name, 'Your photos 📷', photoHint(), true);
@@ -1915,17 +2223,54 @@
       b.appendChild(im); b.addEventListener('click', () => { save.pick = k; buildSaveSheet(); });
       picks.appendChild(b);
     });
-    $('saveSizeRow').hidden = save.mode === 'print';
-    fillSizeSelect($('saveSize'), state.saveSize); $('saveFit').value = state.saveFit; $('saveFit').hidden = state.saveSize === 'orig';
+    $('saveSizeRow').hidden = $('saveAll').hidden = save.mode === 'print';
+    const im = $('savedImg'), origR = save.mode === 'photos' ? (save.origR || 1) : canvas.width / canvas.height;
+    buildSizeChips($('saveSizes'), state.saveSize, origR, id => { state.saveSize = id; resave(); });
+    chipGroup($('saveFits'), FITS, f => f.id === state.saveFit, f => { state.saveFit = f.id; resave(); });
+    $('saveFits').hidden = state.saveSize === 'orig';
+    const Z = SIZES.find(z => z.id === state.saveSize);
+    $('sizeNote').textContent = Z ? `${Z.w}×${Z.h} · ${Z.hint}` : 'Exactly as you made it. Pick a size to fit a social app.';
+    // crop to fill: show the whole picture with a frame to drag
+    const cv = $('cropCv'), crop = cropping();
+    im.hidden = crop; cv.hidden = $('cropHint').hidden = !crop;
+    if (crop) {
+      const i = filledIdx()[save.pick], photo = save.mode === 'photos';
+      drawCropView(cv, photo ? photoSrc(i) : canvas, Z.w, Z.h, saveCropOf(photo ? i : 'booth'));
+    } else cv._crop = null;
+    im.onload = () => {
+      // the "Original" shape follows the picture being saved (a single photo's own shape in Photos)
+      if (state.saveSize !== 'orig') return;
+      const r = im.naturalWidth / im.naturalHeight, sh = $('saveSizes').querySelector('.shape.orig');
+      if (save.mode === 'photos') save.origR = r;
+      if (sh) { sh.style.width = Math.round(26 * Math.min(1, r)) + 'px'; sh.style.height = Math.round(26 * Math.min(1, 1 / r)) + 'px'; }
+    };
     chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Design' }, { id: 'photos', label: '📷 Photos' }, { id: 'print', label: '🖨️ 4×6 print' }],
       m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
   }
-  const resave = () => { Object.assign(save, { strip: null, photos: [] }); saveSettings(); buildSaveSheet(); };
-  $('saveSize').addEventListener('change', (e) => { state.saveSize = e.target.value; resave(); });
-  $('saveFit').addEventListener('change', (e) => { state.saveFit = e.target.value; resave(); });
+  const resave = () => { saveSettings(); buildSaveSheet(); };
+  cropControls($('cropCv'), () => { const C = $('cropCv')._crop; if (C) drawCropView($('cropCv'), C.src, C.W, C.H, C.crop); }, () => buildSaveSheet());
+  $('cropReset').addEventListener('click', () => { const C = $('cropCv')._crop; if (C) { Object.assign(C.crop, CROP0); buildSaveSheet(); } });
   $('save').addEventListener('click', () => {
-    Object.assign(save, { strip: null, print: null, photos: [], pick: 0, stamp: stamp() });
+    Object.assign(save, { strip: null, print: null, photos: [], strips: {}, photoSets: {}, crops: {}, srcs: {}, pick: 0, stamp: stamp(), origR: 0 });
     buildSaveSheet();
+  });
+  // one tap: the design (or the chosen photo) in every social size at once
+  $('saveAll').addEventListener('click', async () => {
+    const btn = $('saveAll'), i = filledIdx()[save.pick];
+    const photo = save.mode === 'photos', src = photo ? photoSrc(i) : (render(), canvas), crop = saveCropOf(photo ? i : 'booth');
+    const base = `photobooth-${save.stamp}` + (photo ? `-photo${i + 1}` : '');
+    btn.disabled = true; btn.textContent = '⏳ Making sizes…';
+    const files = [];
+    for (const z of SIZES) files.push(new File([await toJpeg(toSocial(src, z.id, state.saveFit, crop))], `${base}-${z.id}-${z.w}x${z.h}.jpg`, { type: 'image/jpeg' }));
+    btn.disabled = false; btn.textContent = '📦 Every size';
+    if ((isIOS || isAndroid) && navigator.canShare && navigator.canShare({ files })) { try { await navigator.share({ files }); } catch (err) { /* cancelled */ } return; }
+    for (const f of files) {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      await new Promise(r => setTimeout(r, 300));
+    }
+    toast(`Saved ${files.length} sizes 📦`);
   });
   $('printBtn').addEventListener('click', () => printImage(sheetFile));
   $('dlBtn').addEventListener('click', () => { if (!isIOS && sheetFile) setTimeout(() => toast('Saved ' + sheetFile.name), 300); });
@@ -2137,6 +2482,7 @@
       b.addEventListener('click', () => {
         state.filter = f.id;
         markFilters();
+        if (f.id === 'y2k' && (!state.stamp || state.stamp === 'off')) { state.stamp = 'yymd'; buildStampChips(); toast('📅 Date stamp on — change it under Filters'); }
         if (f.adv) toast('Applying ' + f.name + '…');
         setTimeout(schedule, 30);
       });
@@ -2765,12 +3111,42 @@
     const rest = cps.slice(1); if (rest[0] === '\uFE0F') rest.shift();
     return cps[0] + state.tone + rest.join('');
   }
+  // ---- themed face props: holiday / dress-up groups, starting on the one that matches the occasion ----
+  const FACE_THEMES = [{ id: 'all', label: '✨ All' }, { id: 'birthday', label: '🎂 Birthday' }, { id: 'halloween', label: '🎃 Halloween' },
+    { id: 'thanksgiving', label: '🦃 Thanksgiving' }, { id: 'christmas', label: '🎄 Christmas' }, { id: 'newyear', label: '🥂 New Year' },
+    { id: 'july4', label: '🇺🇸 4th of July' }, { id: 'stpat', label: '☘️ St. Patrick’s' }, { id: 'easter', label: '🐣 Easter' },
+    { id: 'valentine', label: '💘 Valentine’s' }, { id: 'pirate', label: '🏴‍☠️ Pirate' }, { id: 'party', label: '🎭 Dress-up' }];
+  const PAINT_THEMES = { skull: 'halloween', zombie: 'halloween', vampire: 'halloween', clown: 'halloween party', flag: 'july4', eyeblack: 'july4',
+    hearts: 'valentine', glitter: 'newyear party', neon: 'newyear party', galaxy: 'party', tiger: 'party halloween', kitty: 'party halloween',
+    leopard: 'party', panda: 'party', puppy: 'party', butterfly: 'party easter', unicorn: 'party', mermaid: 'party', hero: 'party halloween', freckles: 'party stpat' };
+  const THEME_WORDS = { halloween: /hallow|spook|pumpkin|witch/, thanksgiving: /thanks|turkey|harvest|grateful/, christmas: /christmas|xmas|santa|holiday|noel|jolly/,
+    newyear: /new ?year|nye|countdown/, july4: /july|4th|fourth|independ|usa|america/, stpat: /patrick|shamrock|irish/, easter: /easter|bunny|egg/,
+    valentine: /valentin|be mine/, birthday: /birthday|bday|b-day/ };
+  const faceTheme = { cur: null };                          // null: follow the occasion
+  const themeOf = (kind, id) => kind === 'prop' ? ((PBProps.LIST.find(p => p.id === id) || {}).theme || '')
+    : kind === 'svg' ? (((self.PBStickers || []).find(d => d.id === id) || {}).theme || '') : kind === 'paint' ? (PAINT_THEMES[id] || '') : '';
+  const inTheme = (th, t) => t === 'all' || (' ' + th + ' ').includes(' ' + t + ' ');
+  function curFaceTheme() {
+    if (faceTheme.cur) return faceTheme.cur;
+    const words = `${state.theme} ${state.line1 || ''} ${state.line2 || ''}`.toLowerCase();
+    return Object.keys(THEME_WORDS).find(k => THEME_WORDS[k].test(words)) || 'all';
+  }
+  // chips for the themes that have something in `items` ({ kind, id }); returns the theme in use
+  function themeChips(el, items, rebuild, searching) {
+    const has = FACE_THEMES.filter(t => t.id === 'all' || items.some(c => inTheme(themeOf(c.kind, c.id), t.id)));
+    let cur = searching ? 'all' : curFaceTheme(); if (!has.some(t => t.id === cur)) cur = 'all';   // a search looks through everything
+    chipGroup(el, has, t => t.id === cur, t => { faceTheme.cur = t.id; if (searching) { emojiQuery = ''; $('stSearch').value = ''; } rebuild(); });
+    const on = el.querySelector('[aria-pressed="true"]');
+    if (on) el.scrollLeft = Math.max(0, on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2);
+    return cur;
+  }
   function buildStickerTray() {
     chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
     const el = $('stItems'); el.innerHTML = ''; el.scrollLeft = 0; el.scrollTop = 0;
     el.classList.toggle('grid', stEd.tab === 'emoji');
     $('stCats').hidden = false;
-    $('stCatChips').hidden = $('stTones').hidden = stEd.tab !== 'emoji';
+    $('stTones').hidden = stEd.tab !== 'emoji';
+    $('stCatChips').hidden = stEd.tab === 'words';
     $('stSearch').placeholder = { props: 'Search props', fun: 'Search stickers', words: 'Search words', emoji: 'Search emoji' }[stEd.tab];
     const add = (content, onClick, cls, title) => {
       const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls;
@@ -2780,9 +3156,11 @@
       return b;
     };
     if (stEd.tab === 'props') {
-      PBProps.LIST.forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name));
+      const th = themeChips($('stCatChips'), PBProps.LIST.map(p => ({ kind: 'prop', id: p.id })), buildStickerTray, !!emojiQuery);
+      PBProps.LIST.filter(pr => inTheme(pr.theme, th)).forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name));
     } else if (stEd.tab === 'fun') {
-      (self.PBStickers || []).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
+      const L = self.PBStickers || [], th = themeChips($('stCatChips'), L.map(d => ({ kind: 'svg', id: d.id })), buildStickerTray, !!emojiQuery);
+      L.filter(d => inTheme(d.theme || '', th)).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
     } else if (stEd.tab === 'words') {
       add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
       add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
@@ -2805,7 +3183,7 @@
   }
   $('stSearch').addEventListener('input', (e) => {
     emojiQuery = e.target.value.trim();
-    if (stEd.tab === 'emoji') { buildStickerTray(); return; }
+    if (stEd.tab === 'emoji' || stEd.tab === 'props' || stEd.tab === 'fun') { buildStickerTray(); return; }
     filterTray();
   });
   function filterTray() {
@@ -2910,7 +3288,11 @@
       onDone: () => schedule()
     });
   }
-  $('openStickers').addEventListener('click', openPhotoStickers);
+  $('openStickers').addEventListener('click', () => {
+    if (state.appMode !== 'video') { openPhotoStickers(); return; }
+    if (!cam.last) { toast('Record a video first, then add stickers to it'); return; }
+    $('vidStickers').click();
+  });
   $('previewStickers').addEventListener('click', openPhotoStickers);
   $('openText').addEventListener('click', () => openPhotoStickers('words'));
   $('previewText').addEventListener('click', () => openPhotoStickers('words'));
@@ -3009,7 +3391,7 @@
     if (cam.slot >= 0 && camMode().kind !== 'photo') cam.mode = 'booth';
     $('camera').hidden = false; $('camReview').hidden = true; $('camError').hidden = true;
     syncScroll();
-    buildCamUI(); $('camProps').hidden = true; buildCamProps();
+    buildCamUI(); $('camProps').hidden = $('camPropThemes').hidden = true; buildCamProps();
     if (state.camProps.length) PBFace.load();
     liveStart();
     await startStream();
@@ -3308,14 +3690,55 @@
     buildCamUI();
   });
   $('camExtra').addEventListener('click', () => { cam.glamBW = !cam.glamBW; buildCamUI(); applyPreview(); });
-  $('openCam').addEventListener('click', () => openCamera());
+  $('openCam').addEventListener('click', () => openCamera({ mode: cam.lastOf.photo || 'booth' }));
   $('openVid').addEventListener('click', () => openCamera({ mode: cam.lastOf.video || 'boomerang' }));
   [...$('camKind').children].forEach(b => b.addEventListener('click', () => {
     if (cam.busy) return;
     const kind = b.dataset.kind; if (camMode().kind === kind) return;
     cam.mode = cam.lastOf[kind] || CAM_MODES.find(m => m.kind === kind).id;
     cam.shots = []; buildCamUI(); applyPreview();
+    setAppMode(kind);                                          // the app follows along
   }));
+
+  // ================= Photos mode vs Video mode =================
+  // Everything shared (occasion, background, message, filters, face paint, stickers) stays; photo-only
+  // settings (photos, layouts, collages, party, save) and video-only ones (clip, music, size) swap.
+  function setAppMode(m) {
+    state.appMode = m === 'video' ? 'video' : 'photo';
+    document.body.classList.toggle('mode-video', state.appMode === 'video');
+    document.body.classList.toggle('mode-photo', state.appMode === 'photo');
+    [...$('appMode').children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === state.appMode)));
+    $('openStickers').textContent = state.appMode === 'video' ? '😎 Video sticker studio' : '😎 Open sticker studio';
+    saveSettings();
+    if (state.appMode === 'video') { buildVidSettings(); drawVideoPreview(); }
+  }
+  [...$('appMode').children].forEach(b => b.addEventListener('click', () => setAppMode(b.dataset.mode)));
+  function buildVidSettings() {
+    const kinds = CAM_MODES.filter(m => m.kind === 'video');
+    chipGroup($('vidKinds'), kinds, m => (cam.lastOf.video || 'boomerang') === m.id, m => {
+      cam.lastOf.video = m.id; buildVidSettings();
+    });
+    const cur = kinds.find(m => m.id === (cam.lastOf.video || 'boomerang'));
+    $('vidKindHint').textContent = videoHint(cur.id);
+    chipGroup($('vidMusicMain'), PBMusic.TUNES, t => (state.music || 'none') === t.id, t => { try { audioCtx(); } catch (e) { /* no audio */ } state.music = t.id; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+    chipGroup($('vidPlainMain'), [{ v: false, label: '🎉 Booth design' }, { v: true, label: '🎥 Just the video' }], o => !!state.vplain === o.v,
+      o => { state.vplain = o.v; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+    fillSizeSelect($('vidSizeMain'), state.vidSize); $('vidFitMain').value = state.vidFit; $('vidFitMain').hidden = state.vidSize === 'orig';
+    const sz = state.vidSize === 'orig' ? 'Original size' : plain(labelOf(SIZES, state.vidSize));
+    const m = PBMusic.TUNES.find(t => t.id === (state.music || 'none'));
+    $('sum-vidsettings').textContent = `${plain(m.label)} · ${sz}`;
+  }
+  $('vidSizeMain').addEventListener('change', (e) => { state.vidSize = e.target.value; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+  $('vidFitMain').addEventListener('change', (e) => { state.vidFit = e.target.value; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+  function videoHint(id) {
+    return { boomerang: 'Records about 1.5 seconds, then loops it back and forth.', strobe: 'Flashing strobe frames stitched into a flickery clip. Dance!',
+      slowmo: 'Records 3 seconds and plays it back in slow motion.', spin: 'Records 6 seconds with a fast–slow–fast speed ramp. Walk around the person, or have them spin.' }[id] || '';
+  }
+  $('vidMain').addEventListener('click', () => {
+    if (!cam.last) { $('openVid').click(); return; }
+    if (vid.url && vid.sig === designSig()) { $('vidOpen').click(); return; }
+    $('vidRemake').click();
+  });
 
   // ================= party mode =================
   // A kiosk for guests: full screen, one big button, 4-shot countdown (with the host's design, stickers
@@ -3474,11 +3897,13 @@
       if (typeof content === 'string') b.textContent = content; else b.appendChild(content);
       b.addEventListener('click', click); el.appendChild(b);
     };
-    PBPaint.EFFECTS.forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id && e.id !== 'none',
+    const choices = faceChoices();
+    const th = themeChips($('camPropThemes'), choices.concat(PBPaint.EFFECTS.map(e => ({ kind: 'paint', id: e.id }))), buildCamProps);
+    PBPaint.EFFECTS.filter(e => e.id !== 'none' && inTheme(themeOf('paint', e.id), th)).forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id,
       () => { setPaint(state.facePaint === e.id ? 'none' : e.id); buildCamProps(); }));
-    const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep);
+    if (el.children.length) { const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep); }
     add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
-    faceChoices().forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
+    choices.filter(c => inTheme(themeOf(c.kind, c.id), th)).forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
       state.camProps = hasCamProp(c) ? state.camProps.filter(p => !(p.kind === c.kind && p.id === c.id)) : state.camProps.concat({ kind: c.kind, id: c.id });
       saveSettings(); buildCamProps();
       if (state.camProps.length) PBFace.load();
@@ -3486,7 +3911,7 @@
     $('camPropsBtn').setAttribute('aria-pressed', String(!el.hidden || state.camProps.length > 0));
   }
   $('camPropsBtn').addEventListener('click', () => {
-    $('camProps').hidden = !$('camProps').hidden;
+    $('camPropThemes').hidden = $('camProps').hidden = !$('camProps').hidden;
     buildCamProps();
     if (!$('camProps').hidden) PBFace.load();
   });
@@ -3668,7 +4093,7 @@
     const blurTmp = document.createElement('canvas');
     const frame = document.createElement('canvas');
     const fctx = frame.getContext('2d', { willReadFrequently: true });
-    const holder = { canvas: frame, zoom: 1, cx: null, cy: null, raw: true };
+    const vf = state.vidFrame || {}, holder = { canvas: frame, zoom: vf.zoom || 1, cx: vf.cx, cy: vf.cy, raw: true };
     const jit = { deg: 0, dx: 0, dy: 0 };
     const faceCache = new WeakMap();   // boomerang frames repeat, so find their faces once
     const maskCache = new WeakMap(), meshCache = new WeakMap(), swapOut = document.createElement('canvas');
@@ -3676,6 +4101,8 @@
     const comp = {
       out, stage, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
       track: new Map(), raw: null,
+      // how the clip sits in its window: the crop (in clip pixels) and clip pixels per picture pixel
+      frameFit() { const ir = innerRect(L.rects[0], L.border), c = cropFor(holder, ir.w / ir.h); return { c, per: c.sw / ir.w, fw: frame.width, fh: frame.height }; },
       // faces found in the last frame, in picture coordinates
       facesOf(raw) { return raw ? placeFaces(raw, photoXform(holder, L.rects[0], jit, L.border), 0, W, H) : null; },
       draw(src, mirror, opts = {}) {
@@ -3716,6 +4143,7 @@
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
           if (stage.width !== ow || stage.height !== oh) { stage.width = ow; stage.height = oh; }
           octx.drawImage(frame, 0, 0, ow, oh);
+          const stt = stampText(); if (stt) PBStamp.draw(octx, ow, oh, stt);
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, ow, oh); }
           if (opts.stickers !== false) {
             octx.save(); T.toPhoto(octx, ow / w, 0, 0);
@@ -3729,7 +4157,7 @@
           if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
           drawEdge(octx, W, H);
         }
-        if (Z) fitInto(out.getContext('2d'), stage, out.width, out.height, state.vidFit, blurTmp);
+        if (Z) fitInto(out.getContext('2d'), stage, out.width, out.height, state.vidFit, blurTmp, state.vidCrop);
         if (comp.collect && opts.stickers !== false) {
           const now = opts.t != null ? opts.t : performance.now();
           if (now - comp.lastGrab >= comp.gifDelay - 1) {
@@ -3882,26 +4310,112 @@
     }
   }
   // ---- "Your video" on the main page: live design preview + remake, and the clip kept on the device ----
-  const designSig = () => JSON.stringify([designOf(), state.vplain, state.music, state.adj, state.bgSwap, state.facePaint, swapImageId]);
+  const designSig = () => JSON.stringify([designOf(), state.vplain, state.music, state.adj, state.bgSwap, state.facePaint, swapImageId, state.vidFrame, state.vidCrop]);
   let vidPrevTimer = 0;
   function videoPreviewSoon() { if (!cam.last) return; clearTimeout(vidPrevTimer); vidPrevTimer = setTimeout(drawVideoPreview, 250); }
   function clipStill(clip) { return clip.frames ? clip.frames[Math.floor(clip.frames.length / 2)] : clip.still; }
+  // before anything is recorded, a stand-in frame shows how the design will look
+  let placeholder = null;
+  function placeholderFrame() {
+    if (placeholder) return placeholder;
+    const c = document.createElement('canvas'); c.width = 640; c.height = 480;
+    const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 480);
+    g.addColorStop(0, '#d8cbe8'); g.addColorStop(1, '#9f8ab8'); x.fillStyle = g; x.fillRect(0, 0, 640, 480);
+    x.fillStyle = 'rgba(255,255,255,.55)';
+    x.beginPath(); x.arc(320, 200, 80, 0, 7); x.fill();
+    x.beginPath(); x.ellipse(320, 470, 170, 150, 0, Math.PI, 0); x.fill();
+    x.fillStyle = '#5b4a73'; x.font = '700 30px system-ui, sans-serif'; x.textAlign = 'center'; x.fillText('Your video goes here', 320, 60);
+    return (placeholder = c);
+  }
+  // What dragging on the video preview does: move the clip inside its window (booth design), or pick
+  // what a "crop to fill" size keeps. Both are possible with the booth design + a cropped size.
+  let vidDragPick = 'frame', vidDragOn = false;          // off by default so the page still scrolls over the preview
+  function vidDragMode() {
+    if (!vidDragOn) return '';
+    const crop = state.vidSize !== 'orig' && state.vidFit === 'fill';
+    if (state.vplain) return crop ? 'crop' : '';
+    return crop && vidDragPick === 'crop' ? 'crop' : 'frame';
+  }
+  function buildVidDrag(how) {
+    const crop = state.vidSize !== 'orig' && state.vidFit === 'fill', both = !state.vplain && crop;
+    $('vidDragBtn').hidden = state.vplain && !crop;
+    $('vidDragBtn').textContent = vidDragOn ? '✅ Done moving' : crop ? '✋ Move / crop the video' : '✋ Move / zoom the video';
+    $('vidDragBtn').setAttribute('aria-pressed', String(vidDragOn));
+    $('vidDrag').hidden = !both || !vidDragOn;
+    if (both) chipGroup($('vidDrag'), [{ id: 'frame', label: '🎬 Move video in its window' }, { id: 'crop', label: '✂️ Choose the crop' }],
+      o => o.id === how, o => { vidDragPick = o.id; drawVideoPreview(); });
+    $('vidDragHint').hidden = !how;
+    $('vidDragHint').innerHTML = how === 'crop' ? '✋ Drag the frame to choose what the ' + plain(labelOf(SIZES, state.vidSize)) + ' video keeps · pinch or scroll to zoom · <button type="button" class="linkish" data-reset="crop">Reset</button>'
+      : how ? '✋ Drag the video to choose what shows in its window · pinch or scroll to zoom · <button type="button" class="linkish" data-reset="frame">Reset</button>' : '';
+  }
+  $('vidDragBtn').addEventListener('click', () => { vidDragOn = !vidDragOn; drawVideoPreview(); });
+  $('vidDragHint').addEventListener('click', (e) => {
+    const r = e.target.dataset && e.target.dataset.reset; if (!r) return;
+    if (r === 'crop') state.vidCrop = { ...CROP0 }; else state.vidFrame = { zoom: 1, cx: null, cy: null };
+    saveSettings(); drawVideoPreview();
+  });
+  let vidDrawQ = 0;
+  const vidPreviewNextFrame = () => { if (!vidDrawQ) vidDrawQ = requestAnimationFrame(() => { vidDrawQ = 0; drawVideoPreview(); }); };
+  cropControls($('vidPreview'), vidPreviewNextFrame, () => { saveSettings(); drawVideoPreview(); });
+  (function () {
+    const cv = $('vidPreview'), pts = new Map(); let pinch0 = 0, z0 = 1, wheelT = 0;
+    const setFrame = (f, cx, cy, zoom) => { state.vidFrame = { zoom: Math.max(1, Math.min(ZMAX, zoom)), cx, cy }; };
+    cv.addEventListener('pointerdown', (e) => {
+      if (!cv._frame) return;
+      cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); z0 = state.vidFrame.zoom || 1; }
+      e.preventDefault();
+    });
+    cv.addEventListener('pointermove', (e) => {
+      const p = pts.get(e.pointerId), F = cv._frame; if (!p || !F) return;
+      if (pts.size === 1) {
+        const css = cv.getBoundingClientRect().width / cv.width;                 // screen px per preview px
+        const toClip = F.per / (F.k * css);                                       // screen px → clip px
+        const cx = F.c.cx - (e.clientX - p.x) * toClip / F.fw, cy = F.c.cy - (e.clientY - p.y) * toClip / F.fh;
+        setFrame(F, cx, cy, state.vidFrame.zoom || 1);
+      }
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()]; setFrame(F, F.c.cx, F.c.cy, z0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch0); }
+      vidPreviewNextFrame();
+    });
+    const up = (e) => { if (!pts.delete(e.pointerId)) return; if (pts.size < 2) pinch0 = 0; if (!pts.size) { saveSettings(); drawVideoPreview(); } };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => {
+      const F = cv._frame; if (!F) return; e.preventDefault();
+      setFrame(F, F.c.cx, F.c.cy, (state.vidFrame.zoom || 1) * Math.exp(-e.deltaY * .0015)); vidPreviewNextFrame();
+      clearTimeout(wheelT); wheelT = setTimeout(() => { saveSettings(); drawVideoPreview(); }, 250);
+    }, { passive: false });
+  })();
   function drawVideoPreview() {
-    const L = cam.last; if (!L) return;
-    $('videoSection').hidden = false;
-    const src = clipStill(L.clip);
+    const L = cam.last;
+    if (state.appMode === 'video') buildVidSettings();
+    const src = L ? clipStill(L.clip) : placeholderFrame();
     if (!src) return;
     const comp = videoComposer(state.vplain); comp.collect = false;
     comp.draw(src, false, { t: 0 });
     const out = $('vidPreview'), k = Math.min(1, 540 / Math.max(comp.out.width, comp.out.height));
-    out.width = Math.round(comp.out.width * k); out.height = Math.round(comp.out.height * k);
-    out.getContext('2d').drawImage(comp.out, 0, 0, out.width, out.height);
+    const how = vidDragMode(), Z = state.vidSize !== 'orig' ? sizeOf(state.vidSize) : null;
+    if (how === 'crop') drawCropView(out, comp.stage, Z.w, Z.h, state.vidCrop);
+    else {
+      out.width = Math.round(comp.out.width * k); out.height = Math.round(comp.out.height * k);
+      out.getContext('2d').drawImage(comp.out, 0, 0, out.width, out.height);
+      out._crop = null;
+    }
+    // for dragging the clip around its window: preview pixels → clip pixels
+    const kfit = !Z ? 1 : state.vidFit === 'fill' ? cropFrame(comp.W, comp.H, comp.out.width, comp.out.height, state.vidCrop).k
+      : Math.min(comp.out.width / comp.W, comp.out.height / comp.H);
+    out._frame = how === 'frame' ? { ...comp.frameFit(), k: k * kfit } : null;
+    out.classList.toggle('draggable', !!how);
+    buildVidDrag(how);
     const dirty = !!vid.url && vid.sig !== designSig();
     $('vidPrevHint').classList.toggle('dirty', dirty);
     $('vidPrevHint').innerHTML = dirty
       ? '✨ You changed the design — tap <b>Remake video</b> to put it in the video.'
       : 'Change the background, message, filters, face paint or stickers above and this preview follows along. Tap <b>Remake video</b> to rebuild it (takes a few seconds).';
     $('vidOpen').disabled = !vid.url;
+    $('vidRemake').disabled = $('vidStickers2').disabled = !L;
+    if (!L) $('vidPrevHint').innerHTML = 'Record a video and it shows up here with your design. Change the background, message, filters and more first if you like.';
+    $('vidMain').textContent = !L ? '🎥 Record a video' : vid.url && !dirty ? '▶️ Open your video' : '🎬 Make the video';
   }
   $('vidRemake').addEventListener('click', () => { try { audioCtx(); } catch (e) { /* no audio */ } buildVideo(); });
   $('vidOpen').addEventListener('click', () => { if (!vid.url) return; $('videoSheet').hidden = false; syncScroll(); $('outVideo').play().catch(() => {}); });
@@ -4038,13 +4552,14 @@
   addSearch($('presets'), '🔍 Search occasions (e.g. july, dad, easter)');
   addSearch($('themes'), '🔍 Search backgrounds');
   addSearch($('filterTiles'), '🔍 Search filters');
-  syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips();
+  syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips(); buildStampChips();
   setTimeout(readDesignLink, 300);
   buildThemes();
   buildEmojis();
   syncUI();
   buildFilterTiles();
   render();
+  setAppMode(state.appMode);
   restoreClip();
   restorePhotos().then(n => {
     if (!n) return;
@@ -4072,6 +4587,7 @@
     const reload = () => { if (!reloading) { reloading = true; location.reload(); } };
     // photos are kept on the device, so only something open on screen (camera, editor, a video being made) blocks it
     const busy = () => OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
+    if (/[?&]fresh=/.test(location.search)) history.replaceState(null, '', location.pathname + location.hash);
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!controlled) { controlled = true; return; }            // first install taking over: nothing to refresh
       if (busy()) $('updateBar').hidden = false; else reload();
@@ -4083,6 +4599,47 @@
       const check = () => reg.update().catch(() => {});
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
       setInterval(check, 30 * 60 * 1000);
+      showVersion();
+    });
+
+    // ---- "Check for updates": asks the server which version is current and, if the automatic update
+    // doesn't take over within a few seconds, clears this app's cached files and loads a fresh copy.
+    // (Only this app's caches; photos, designs and other apps on the site are untouched.)
+    const PREFIX = 'birthday-photobooth-';
+    const myVersion = async () => {
+      const k = (await caches.keys()).find(n => n.startsWith(PREFIX) && n !== PREFIX + 'vendor');
+      return k ? k.slice(PREFIX.length) : null;
+    };
+    async function showVersion() {
+      try { const v = await myVersion(); if (v) $('appVersion').textContent = 'Version ' + v.slice(0, 7); } catch (e) { /* no caches */ }
+    }
+    async function freshCopy() {
+      toast('Getting the newest version…');
+      try {
+        for (const k of await caches.keys()) if (k.startsWith(PREFIX) && k !== PREFIX + 'vendor') await caches.delete(k);
+        const reg = await navigator.serviceWorker.getRegistration('./');
+        if (reg) await reg.unregister();
+      } catch (e) { /* carry on with the reload */ }
+      reloading = true;
+      location.replace(location.pathname + '?fresh=' + Date.now());
+    }
+    $('forceUpdate').addEventListener('click', async () => {
+      if (!navigator.onLine) { toast("You're offline — connect to the internet to update"); return; }
+      const btn = $('forceUpdate'); btn.disabled = true; btn.textContent = '🔄 Checking…';
+      try {
+        const text = await (await fetch('sw.js?check=' + Date.now(), { cache: 'no-store' })).text();
+        const m = /CACHE = PREFIX \+ '([^']+)'/.exec(text), latest = m && m[1], mine = await myVersion();
+        if (latest && mine && latest === mine) {
+          if (confirm(`You already have the newest version (${mine.slice(0, 7)}).\nReload a fresh copy anyway?`)) freshCopy();
+          return;
+        }
+        const reg = await navigator.serviceWorker.getRegistration('./');
+        if (reg) { await reg.update().catch(() => {}); if (reg.waiting) reg.waiting.postMessage('skipWaiting'); }
+        toast('Updating…');
+        setTimeout(() => { if (!reloading) freshCopy(); }, 6000);   // didn't switch over by itself
+      } catch (e) {
+        toast("Couldn't reach the server — try again in a moment");
+      } finally { btn.disabled = false; btn.textContent = '🔄 Check for updates'; }
     });
   }
 })();

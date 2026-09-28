@@ -25,18 +25,21 @@
 <header>
   <h1>📸 Photo Booth ✨</h1>
   <p>Add photos · make it yours · save</p>
+  <div class="app-mode" id="appMode" role="tablist" aria-label="What are you making?">
+    <button type="button" data-mode="photo" role="tab">📸 Photos</button>
+    <button type="button" data-mode="video" role="tab">🎥 Video</button>
+  </div>
 </header>
 
 <main>
 
-  <section>
+  <section class="only-photo" id="photosSection">
     <h2>📷 Your photos</h2>
     <div class="chips seg" id="boothMode"></div>
     <div class="counts-row"><span id="countsLabel" hidden>Photos:</span><div class="chips" id="counts"></div></div>
     <div class="slots" id="slots"></div>
     <div class="row" style="flex-wrap:nowrap">
-      <button id="openCam" type="button" class="primary" style="flex:1.2 1 auto;padding:12px 8px">📸 Photos</button>
-      <button id="openVid" type="button" class="primary vidbtn" style="flex:1.1 1 auto;padding:12px 8px">🎥 Video</button>
+      <button id="openCam" type="button" class="primary" style="flex:1.4 1 auto;padding:12px 8px">📸 Camera</button>
       <label class="btn" style="flex:1 1 auto;padding:12px 8px">
         🖼️ <span id="multiLabel">Upload</span>
         <input type="file" id="multi" accept="image/*" multiple hidden>
@@ -48,7 +51,33 @@
     <input type="file" id="replaceInput" accept="image/*" hidden>
   </section>
 
-  <details class="card" data-key="party">
+  <section class="only-video" id="videoStart">
+    <h2>🎥 Your video</h2>
+    <div class="chips" id="vidKinds"></div>
+    <p class="hint" id="vidKindHint"></p>
+    <div class="btnrow"><button id="openVid" type="button" class="primary vidbtn">🎥 Record a video</button></div>
+  </section>
+
+  <details class="card only-video" data-key="vidsettings" open>
+    <summary><span>🎵 Music &amp; size</span><span class="val" id="sum-vidsettings"></span></summary>
+    <div class="body">
+      <h3 style="margin-top:0">Music</h3>
+      <div class="chips" id="vidMusicMain"></div>
+      <h3>Picture</h3>
+      <div class="chips" id="vidPlainMain"></div>
+      <h3>Size</h3>
+      <div class="size-row" style="justify-content:flex-start">
+        <label>📐 <select id="vidSizeMain" aria-label="Video size for social media"></select></label>
+        <label><select id="vidFitMain" aria-label="How to fit it">
+          <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
+          <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
+        </select></label>
+      </div>
+      <p class="hint" style="text-align:left">Tap <b>Remake video</b> below after changing these.</p>
+    </div>
+  </details>
+
+  <details class="card only-photo" data-key="party">
     <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
     <div class="body">
       <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
@@ -65,6 +94,12 @@
     <div class="body">
       <p class="swipe-hint">Applies to every photo · tap a photo to give just that one its own filter. Swipe for more →</p>
       <div class="tgrid ftiles" id="filterTiles"></div>
+      <h3>📅 Date stamp <span style="font-weight:600">· like a 2000s camera</span></h3>
+      <div class="chips" id="stampChips"></div>
+      <div class="row" id="stampDateRow" hidden style="justify-content:flex-start;align-items:center">
+        <label class="field" style="margin:0">Date <input type="date" id="stampDate"></label>
+        <button type="button" class="linkbtn" id="stampToday">Use today</button>
+      </div>
       <h3>🎨 Face paint</h3>
       <div class="chips hscroll" id="paintChips" style="grid-template-rows:auto"></div>
       <h3>🧍 Background behind people</h3>
@@ -108,33 +143,29 @@
     <div class="tgrid" id="themes"></div>
 
     <div class="panel" id="customPanel" hidden>
-      <div class="grid2">
-        <label class="field">Color 1 <div class="pair"><input type="color" id="c1" style="width:100%"></div></label>
-        <label class="field">Color 2 <div class="pair"><input type="color" id="c2" style="width:100%"></div></label>
+      <h3 style="margin-top:0">Color ideas</h3>
+      <div class="chips palettes" id="palettes"></div>
+      <div class="grid3">
+        <label class="field">Color 1 <input type="color" id="c1"></label>
+        <label class="field">Color 2 <input type="color" id="c2"></label>
+        <label class="field"><span><input type="checkbox" id="use3"> Color 3</span> <input type="color" id="c3"></label>
       </div>
+      <h3>Fade</h3>
+      <div class="chips" id="fadeDirs"></div>
+      <h3>On top</h3>
+      <div class="chips" id="decos"></div>
       <div class="grid2">
-        <label class="field">Decorations
-          <select id="deco">
-            <option value="confetti">Confetti</option>
-            <option value="dots">Dots</option>
-            <option value="stars">Stars</option>
-            <option value="hearts">Hearts</option>
-            <option value="balloons">Balloons</option>
-            <option value="snow">Snowflakes</option>
-            <option value="sparkles">Sparkles</option>
-            <option value="flowers">Flowers</option>
-            <option value="none">None</option>
-          </select>
-        </label>
-        <label class="field">Decoration colors
+        <label class="field">Colors
           <select id="decoColor">
             <option value="bright">Bright</option>
             <option value="pastel">Pastel</option>
             <option value="white">White</option>
             <option value="gold">Gold</option>
             <option value="dark">Dark</option>
+            <option value="match">Match the fade</option>
           </select>
         </label>
+        <label class="field">How many <input type="range" id="decoDensity" min="0.3" max="2.5" step="0.1" style="margin-top:14px"></label>
       </div>
     </div>
 
@@ -199,7 +230,7 @@
     </div>
   </details>
 
-  <details class="card" data-key="layout">
+  <details class="card only-photo" data-key="layout">
     <summary><span>🧩 Layout &amp; style</span><span class="val" id="sum-layout"></span></summary>
     <div class="body">
     <h3 style="margin-top:0">Photo booth layouts</h3>
@@ -212,6 +243,7 @@
       <p class="hint" style="text-align:left" id="collageSizeHint"></p>
       <label class="field slider">↔️ Border <input type="range" id="collageGap" min="0" max="0.08" step="0.005"></label>
       <label class="check"><input type="checkbox" id="collageCaption"> Show the message &amp; icons</label>
+      <div class="btnrow"><button type="button" id="cutOpen">✂️ Draw your own lines</button></div>
     </div>
     <h3>Photo style</h3>
     <div class="chips" id="styles"></div>
@@ -263,16 +295,19 @@
     </div>
   </details>
 
-  <section id="previewSection">
+  <section id="previewSection" class="only-photo">
     <h2>👀 Preview</h2>
     <div class="preview-wrap"><canvas id="preview"></canvas></div>
     <p class="hint">Tap a photo in the preview to change, move or zoom it.</p>
     <div class="btnrow"><button type="button" id="previewStickers">😎 Stickers &amp; props</button><button type="button" id="previewText">🔤 Add text</button></div>
   </section>
 
-  <section id="videoSection" hidden>
+  <section id="videoSection" class="only-video">
     <h2>🎬 Your video</h2>
+    <div class="btnrow"><button type="button" id="vidDragBtn" aria-pressed="false">✋ Move / zoom the video</button></div>
+    <div class="chips fit-chips" id="vidDrag" hidden></div>
     <div class="preview-wrap vid"><canvas id="vidPreview"></canvas></div>
+    <p class="size-note" id="vidDragHint" hidden></p>
     <p class="hint" id="vidPrevHint">Change the background, message, filters, face paint or stickers above and this preview follows along.
       Tap <b>Remake video</b> to rebuild it (takes a few seconds).</p>
     <div class="btnrow">
@@ -287,9 +322,14 @@
 
   <div class="sticky-save">
     <button id="jump" type="button" aria-label="Show preview">👀</button>
-    <button class="primary" id="save" type="button" disabled>Add photos to save</button>
+    <button class="primary only-photo" id="save" type="button" disabled>Add photos to save</button>
+    <button class="primary only-video vidbtn" id="vidMain" type="button">🎥 Record a video</button>
   </div>
 </main>
+<footer class="app-foot">
+  <span id="appVersion">Photo Booth</span> ·
+  <button type="button" class="linkbtn" id="forceUpdate">🔄 Check for updates</button>
+</footer>
 <div id="toast"></div>
 <div id="updateBar" hidden><span>✨ Updated! Reload when ready</span><button type="button" class="primary" id="updateBtn">Reload</button></div>
 
@@ -327,6 +367,7 @@
   <div class="cam-bottom">
     <div class="cam-zoom" id="camZoom"></div>
     <div id="camShots"></div>
+    <div class="cam-strip small" id="camPropThemes" hidden></div>
     <div class="cam-strip props" id="camProps" hidden></div>
     <div class="cam-strip small" id="camFilters"></div>
     <div class="cam-kind" id="camKind" role="tablist">
@@ -483,6 +524,25 @@
   </div>
 </div>
 
+<div id="cutEd" hidden>
+  <div class="ed-top">
+    <div class="ed-left">
+      <button id="cutUndo" type="button" aria-label="Undo" title="Undo">↶</button>
+      <button id="cutClear" type="button" aria-label="Start over" title="Start over">🗑</button>
+    </div>
+    <div style="text-align:center">
+      <div class="title">Cut your collage</div>
+      <div class="sub" id="cutSub">Drag across to cut · up to 9 pieces</div>
+    </div>
+    <button id="cutDone" type="button" class="primary">✓ Done</button>
+  </div>
+  <canvas id="cutCanvas"></canvas>
+  <div class="cut-bar">
+    <label class="check" style="color:#fff"><input type="checkbox" id="cutSnap" checked> Snap to straight &amp; 15° angles</label>
+    <button type="button" id="cutFrom">Start from the current layout</button>
+  </div>
+</div>
+
 <div id="textSheet" class="overlay" hidden>
   <div class="sheet">
     <h2 id="txtTitle">Add your text</h2>
@@ -500,19 +560,20 @@
     <h2 id="sheetTitle">Your picture is ready 🎉</h2>
     <div class="chips save-modes" id="saveModes" hidden></div>
     <img id="savedImg" alt="Your photo booth picture">
+    <canvas id="cropCv" class="crop-cv" hidden aria-label="Drag to choose what the cropped picture keeps"></canvas>
+    <p class="size-note" id="cropHint" hidden>✋ Drag the frame to choose what's kept · pinch or scroll to zoom · <button type="button" class="linkish" id="cropReset">Reset</button></p>
     <div class="save-picks" id="savePicks" hidden></div>
-    <div class="size-row" id="saveSizeRow">
-      <label>📐 <select id="saveSize" aria-label="Size for social media"></select></label>
-      <label><select id="saveFit" aria-label="How to fit it">
-        <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
-        <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
-      </select></label>
+    <div id="saveSizeRow">
+      <div class="size-chips" id="saveSizes" role="group" aria-label="Size for social media"></div>
+      <div class="chips fit-chips" id="saveFits" role="group" aria-label="How to fit it"></div>
+      <p class="size-note" id="sizeNote"></p>
     </div>
     <p class="hint" id="saveHint"></p>
     <div class="row">
       <a class="btn primary" id="dlBtn" href="#" download>⬇️ Save to device</a>
       <button id="shareBtn" type="button">📤 Share</button>
       <button id="printBtn" type="button">🖨️ Print</button>
+      <button id="saveAll" type="button">📦 Every size</button>
     </div>
     <button id="sheetClose" type="button">Close</button>
   </div>
@@ -541,12 +602,14 @@
 <script src="js/filters.js"></script>
 <script src="js/props.js"></script>
 <script src="js/holidays.js"></script>
+<script src="js/collage.js"></script>
 <script src="stickers/stickers.js"></script>
 <script src="js/emoji-data.js"></script>
 <script src="js/encoders.js"></script>
 <script src="js/music.js"></script>
 <script src="js/face.js"></script>
 <script src="js/facepaint.js"></script>
+<script src="js/datestamp.js"></script>
 <script src="js/lib/qrcode.js"></script>
 <script src="js/app.js"></script>
 </body>

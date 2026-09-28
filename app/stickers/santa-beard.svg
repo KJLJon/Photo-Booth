@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="300" viewBox="0 0 280 300">
+<defs><radialGradient id="w" cx=".5" cy=".3" r=".75"><stop offset="0" stop-color="#fff"/><stop offset=".8" stop-color="#e9edf3"/><stop offset="1" stop-color="#c9d0db"/></radialGradient></defs>
+<path fill-rule="evenodd" fill="url(#w)" stroke="#9aa3b2" stroke-width="3.5" stroke-linejoin="round" d="M14 6 Q4 60 16 110 Q10 150 30 180 Q30 220 60 240 Q70 272 104 278 Q120 298 140 298 Q160 298 176 278 Q210 272 220 240 Q250 220 250 180 Q270 150 264 110 Q276 60 266 6 Q250 40 236 62 Q226 94 196 100 Q170 104 140 100 Q110 104 84 100 Q54 94 44 62 Q30 40 14 6Z
+M104 64 Q140 52 176 64 Q170 92 140 96 Q110 92 104 64Z"/>
+<path d="M140 40 Q118 20 86 34 Q60 44 40 34 Q48 62 80 66 Q112 68 140 52 Q168 68 200 66 Q232 62 240 34 Q220 44 194 34 Q162 20 140 40Z" fill="url(#w)" stroke="#9aa3b2" stroke-width="3.5" stroke-linejoin="round"/>
+<g stroke="#c9d0db" stroke-width="3" fill="none" stroke-linecap="round"><path d="M60 140 q10 30 30 50"/><path d="M220 140 q-10 30 -30 50"/><path d="M110 150 q4 40 14 70"/><path d="M170 150 q-4 40 -14 70"/><path d="M140 130 v110"/><path d="M40 90 q0 30 14 50"/><path d="M240 90 q0 30 -14 50"/></g>
+</svg>

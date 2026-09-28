@@ -19,6 +19,8 @@ const ASSETS = [
   './js/music.js',
   './js/facepaint.js',
   './js/holidays.js',
+  './js/datestamp.js',
+  './js/collage.js',
   './js/emoji-data.js',
   './js/app.js',
   './stickers/stickers.js'
@@ -39,6 +41,8 @@ self.addEventListener('install', (e) => {
     .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
     .then(() => self.skipWaiting()));
 });
+
+self.addEventListener('message', (e) => { if (e.data === 'skipWaiting') self.skipWaiting(); });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="210" viewBox="0 0 320 210">
+<defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#7048e8"/><stop offset=".5" stop-color="#9775fa"/><stop offset="1" stop-color="#5f3dc4"/></linearGradient>
+<linearGradient id="au" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff1a8"/><stop offset="1" stop-color="#d49a00"/></linearGradient></defs>
+<g stroke-linejoin="round">
+<path d="M246 112 C250 60 276 22 312 2 C306 40 290 84 256 116Z" fill="#e64980" stroke="#8a1c4a" stroke-width="2.5"/>
+<path d="M252 114 C272 74 300 50 320 44 C314 76 290 104 260 120Z" fill="#20c997" stroke="#0b6b50" stroke-width="2.5"/>
+<path d="M240 110 C236 70 246 30 268 6 C272 44 262 84 250 116Z" fill="#fcc419" stroke="#8a6a00" stroke-width="2.5"/>
+<path d="M254 112 C262 70 284 34 308 12 M258 116 C276 86 298 64 316 50 M246 112 C244 76 252 40 266 16" stroke="#fff" stroke-width="1.6" fill="none" opacity=".75"/>
+</g>
+<path fill-rule="evenodd" fill="url(#mg)" stroke="url(#au)" stroke-width="6" stroke-linejoin="round" d="M160 104 Q140 88 110 90 Q60 92 34 118 Q18 136 30 150 Q44 136 60 150 Q80 170 110 168 Q144 166 160 146 Q176 166 210 168 Q240 170 260 150 Q276 136 290 150 Q302 136 286 118 Q260 92 210 90 Q180 88 160 104Z
+M80 130 Q110 106 140 130 Q110 150 80 130Z M180 130 Q210 106 240 130 Q210 150 180 130Z"/>
+<path d="M80 130 Q110 106 140 130 Q110 150 80 130Z M180 130 Q210 106 240 130 Q210 150 180 130Z" fill="none" stroke="url(#au)" stroke-width="4"/>
+<g fill="url(#au)"><circle cx="160" cy="112" r="6"/><circle cx="60" cy="126" r="3.5"/><circle cx="260" cy="126" r="3.5"/><circle cx="110" cy="100" r="3"/><circle cx="210" cy="100" r="3"/></g>
+<g fill="#fff" opacity=".8"><circle cx="96" cy="152" r="2"/><circle cx="224" cy="152" r="2"/><circle cx="140" cy="98" r="2"/></g>
+</svg>

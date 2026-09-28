@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="240" viewBox="0 0 300 240">
+<path d="M90 200 Q80 170 96 150 Q108 132 90 112 Q76 96 90 80" stroke="#444" stroke-width="4" fill="none"/><g transform="translate(90 62)"><path transform="scale(1.7)" d="M0 12 C-22 -2 -14 -18 0 -8 C14 -18 22 -2 0 12Z" fill="#ff4d6d" stroke="#8a0a2a" stroke-width="1.5" stroke-linejoin="round"/><ellipse cx="-12" cy="-8" rx="5" ry="3" fill="#fff" opacity=".7" transform="rotate(-30 -12 -8)"/></g><path d="M210 200 Q200 170 216 150 Q228 132 210 112 Q196 96 210 80" stroke="#444" stroke-width="4" fill="none"/><g transform="translate(210 62)"><path transform="scale(1.7)" d="M0 12 C-22 -2 -14 -18 0 -8 C14 -18 22 -2 0 12Z" fill="#ff8fab" stroke="#a4133c" stroke-width="1.5" stroke-linejoin="round"/><ellipse cx="-12" cy="-8" rx="5" ry="3" fill="#fff" opacity=".7" transform="rotate(-30 -12 -8)"/></g>
+<path d="M40 226 Q150 192 260 226" stroke="#8a0a2a" stroke-width="16" fill="none" stroke-linecap="round"/>
+<path d="M40 226 Q150 192 260 226" stroke="#ff4d6d" stroke-width="10" fill="none" stroke-linecap="round"/>
+<g fill="#fff"><path transform="translate(150 206) scale(.4)" d="M0 12 C-22 -2 -14 -18 0 -8 C14 -18 22 -2 0 12Z"/></g>
+</svg>
