@@ -1232,12 +1232,33 @@
       b.textContent = it.label || it.name;
       if (styleFn) styleFn(b, it);
       b.addEventListener('click', () => onPick(it, idx));
+      if (it.k) b.dataset.k = it.k;
       el.appendChild(b);
     });
+    if (el._search) el._search();
+  }
+  // a search box above a long list of options; matches the label, tooltip and extra keywords
+  function addSearch(listEl, placeholder) {
+    const inp = document.createElement('input');
+    inp.type = 'search'; inp.className = 'opt-search'; inp.placeholder = placeholder; inp.setAttribute('aria-label', placeholder);
+    listEl.parentNode.insertBefore(inp, listEl);
+    const empty = document.createElement('p'); empty.className = 'hint'; empty.hidden = true; empty.textContent = 'Nothing matches — try another word';
+    listEl.parentNode.insertBefore(empty, listEl.nextSibling);
+    listEl._search = () => {
+      const words = inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      [...listEl.children].forEach(c => {
+        const text = (c.textContent + ' ' + (c.title || '') + ' ' + (c.dataset.k || '')).toLowerCase();
+        c.hidden = !words.every(w => text.includes(w));
+        if (!c.hidden) shown++;
+      });
+      empty.hidden = shown > 0;
+    };
+    inp.addEventListener('input', () => { listEl._search(); listEl.scrollLeft = 0; });
   }
 
   function buildPresets() {
-    chipGroup($('presets'), PRESETS, (_, i) => state.preset === i, (p, i) => {
+    chipGroup($('presets'), PRESETS.map(p => ({ ...p, k: [p.k, THEMES[p.theme] && THEMES[p.theme].name, p.line1].join(' ') })), (_, i) => state.preset === i, (p, i) => {
       state.preset = i;
       state.theme = p.theme; state.line1 = p.line1;
       state.iconLeft = p.left; state.iconRight = p.right; state.font = p.font;
@@ -1440,10 +1461,12 @@
       label.textContent = t.name;
       b.append(cv, label);
       b.addEventListener('click', () => { state.theme = id; markThemes(); schedule(); });
+      b.dataset.k = id + ' ' + (PRESETS.filter(p => p.theme === id).map(p => p.name + ' ' + (p.k || '')).join(' '));
       el.appendChild(b);
       drawThumb(id);
     });
     markThemes();
+    if (el._search) el._search();
   }
   function markThemes() {
     document.querySelectorAll('#themes .tile').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === state.theme)));
@@ -1919,6 +1942,7 @@
       el.appendChild(b);
     });
     markFilters();
+    if (el._search) el._search();
   }
   function markFilters() {
     document.querySelectorAll('#filterTiles .tile').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === state.filter)));
@@ -2541,10 +2565,12 @@
     return cps[0] + state.tone + rest.join('');
   }
   function buildStickerTray() {
-    chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; buildStickerTray(); });
+    chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
     const el = $('stItems'); el.innerHTML = ''; el.scrollLeft = 0; el.scrollTop = 0;
     el.classList.toggle('grid', stEd.tab === 'emoji');
-    const cats = $('stCats'); cats.hidden = stEd.tab !== 'emoji';
+    $('stCats').hidden = false;
+    $('stCatChips').hidden = $('stTones').hidden = stEd.tab !== 'emoji';
+    $('stSearch').placeholder = { props: 'Search props', fun: 'Search stickers', words: 'Search words', emoji: 'Search emoji' }[stEd.tab];
     const add = (content, onClick, cls, title) => {
       const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls;
       if (title) { b.title = title; b.setAttribute('aria-label', title); }
@@ -2560,8 +2586,8 @@
       add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
       add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
       add('💥 Your own burst', () => { const t = askText('Words for the comic burst:', 'WHOA!', 16); if (t) addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 }); }, 'txt');
-      PBProps.WORDS.bubble.forEach(t => add(propIcon('bubble', t), () => addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 })));
-      PBProps.WORDS.burst.forEach(t => add(propIcon('burst', t), () => addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 })));
+      PBProps.WORDS.bubble.forEach(t => add(propIcon('bubble', t), () => addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }), '', t + ' speech bubble'));
+      PBProps.WORDS.burst.forEach(t => add(propIcon('burst', t), () => addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 }), '', t + ' comic burst'));
     } else {
       const D = window.PBEmojiData || [];
       chipGroup($('stTones'), TONES.map(t => ({ t, label: '✋' + t })), o => (state.tone || '') === o.t,
@@ -2574,8 +2600,21 @@
       if (!list.length) add('No emoji match', () => {}, 'txt wide');
       list.forEach(x => add(x.e, () => addSticker({ kind: 'emoji', id: x.e, s: .2 }), '', x.n));
     }
+    if (stEd.tab !== 'emoji') filterTray();
   }
-  $('stSearch').addEventListener('input', (e) => { emojiQuery = e.target.value.trim(); buildStickerTray(); });
+  $('stSearch').addEventListener('input', (e) => {
+    emojiQuery = e.target.value.trim();
+    if (stEd.tab === 'emoji') { buildStickerTray(); return; }
+    filterTray();
+  });
+  function filterTray() {
+    const words = emojiQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    [...$('stItems').children].forEach(b => {
+      if (b.classList.contains('wide') || b.classList.contains('txt')) return;       // "add your own" buttons stay
+      const t = ((b.title || '') + ' ' + b.textContent).toLowerCase();
+      b.hidden = !words.every(w => t.includes(w));
+    });
+  }
   function askText(label, def, max) {
     const t = prompt(label, def);
     return t && t.trim() ? t.trim().slice(0, max || 60) : null;
@@ -3785,6 +3824,9 @@
   // ================= start =================
   PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); buildSwapChips(); });
   loadSettings();
+  addSearch($('presets'), '🔍 Search occasions (e.g. july, dad, easter)');
+  addSearch($('themes'), '🔍 Search backgrounds');
+  addSearch($('filterTiles'), '🔍 Search filters');
   syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips();
   setTimeout(readDesignLink, 300);
   buildThemes();
