@@ -3111,12 +3111,40 @@
     const rest = cps.slice(1); if (rest[0] === '\uFE0F') rest.shift();
     return cps[0] + state.tone + rest.join('');
   }
+  // ---- themed face props: holiday / dress-up groups, starting on the one that matches the occasion ----
+  const FACE_THEMES = [{ id: 'all', label: '✨ All' }, { id: 'birthday', label: '🎂 Birthday' }, { id: 'halloween', label: '🎃 Halloween' },
+    { id: 'thanksgiving', label: '🦃 Thanksgiving' }, { id: 'christmas', label: '🎄 Christmas' }, { id: 'newyear', label: '🥂 New Year' },
+    { id: 'july4', label: '🇺🇸 4th of July' }, { id: 'stpat', label: '☘️ St. Patrick’s' }, { id: 'easter', label: '🐣 Easter' },
+    { id: 'valentine', label: '💘 Valentine’s' }, { id: 'pirate', label: '🏴‍☠️ Pirate' }, { id: 'party', label: '🎭 Dress-up' }];
+  const PAINT_THEMES = { skull: 'halloween', zombie: 'halloween', vampire: 'halloween', clown: 'halloween party', flag: 'july4', eyeblack: 'july4',
+    hearts: 'valentine', glitter: 'newyear party', neon: 'newyear party', galaxy: 'party', tiger: 'party halloween', kitty: 'party halloween',
+    leopard: 'party', panda: 'party', puppy: 'party', butterfly: 'party easter', unicorn: 'party', mermaid: 'party', hero: 'party halloween', freckles: 'party stpat' };
+  const THEME_WORDS = { halloween: /hallow|spook|pumpkin|witch/, thanksgiving: /thanks|turkey|harvest|grateful/, christmas: /christmas|xmas|santa|holiday|noel|jolly/,
+    newyear: /new ?year|nye|countdown/, july4: /july|4th|fourth|independ|usa|america/, stpat: /patrick|shamrock|irish/, easter: /easter|bunny|egg/,
+    valentine: /valentin|be mine/, birthday: /birthday|bday|b-day/ };
+  const faceTheme = { cur: null };                          // null: follow the occasion
+  const themeOf = (kind, id) => kind === 'prop' ? ((PBProps.LIST.find(p => p.id === id) || {}).theme || '')
+    : kind === 'svg' ? (((self.PBStickers || []).find(d => d.id === id) || {}).theme || '') : kind === 'paint' ? (PAINT_THEMES[id] || '') : '';
+  const inTheme = (th, t) => t === 'all' || (' ' + th + ' ').includes(' ' + t + ' ');
+  function curFaceTheme() {
+    if (faceTheme.cur) return faceTheme.cur;
+    const words = `${state.theme} ${state.line1 || ''} ${state.line2 || ''}`.toLowerCase();
+    return Object.keys(THEME_WORDS).find(k => THEME_WORDS[k].test(words)) || 'all';
+  }
+  // chips for the themes that have something in `items` ({ kind, id }); returns the theme in use
+  function themeChips(el, items, rebuild) {
+    const has = FACE_THEMES.filter(t => t.id === 'all' || items.some(c => inTheme(themeOf(c.kind, c.id), t.id)));
+    let cur = curFaceTheme(); if (!has.some(t => t.id === cur)) cur = 'all';
+    chipGroup(el, has, t => t.id === cur, t => { faceTheme.cur = t.id; rebuild(); });
+    return cur;
+  }
   function buildStickerTray() {
     chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
     const el = $('stItems'); el.innerHTML = ''; el.scrollLeft = 0; el.scrollTop = 0;
     el.classList.toggle('grid', stEd.tab === 'emoji');
     $('stCats').hidden = false;
-    $('stCatChips').hidden = $('stTones').hidden = stEd.tab !== 'emoji';
+    $('stTones').hidden = stEd.tab !== 'emoji';
+    $('stCatChips').hidden = stEd.tab === 'words';
     $('stSearch').placeholder = { props: 'Search props', fun: 'Search stickers', words: 'Search words', emoji: 'Search emoji' }[stEd.tab];
     const add = (content, onClick, cls, title) => {
       const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls;
@@ -3126,9 +3154,11 @@
       return b;
     };
     if (stEd.tab === 'props') {
-      PBProps.LIST.forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name));
+      const th = themeChips($('stCatChips'), PBProps.LIST.map(p => ({ kind: 'prop', id: p.id })), buildStickerTray);
+      PBProps.LIST.filter(pr => inTheme(pr.theme, th)).forEach(pr => add(propIcon(pr.id), () => addSticker({ kind: 'prop', id: pr.id, s: pr.h > 1 ? .26 : .36 }), '', pr.name));
     } else if (stEd.tab === 'fun') {
-      (self.PBStickers || []).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
+      const L = self.PBStickers || [], th = themeChips($('stCatChips'), L.map(d => ({ kind: 'svg', id: d.id })), buildStickerTray);
+      L.filter(d => inTheme(d.theme || '', th)).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
     } else if (stEd.tab === 'words') {
       add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
       add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
@@ -3359,7 +3389,7 @@
     if (cam.slot >= 0 && camMode().kind !== 'photo') cam.mode = 'booth';
     $('camera').hidden = false; $('camReview').hidden = true; $('camError').hidden = true;
     syncScroll();
-    buildCamUI(); $('camProps').hidden = true; buildCamProps();
+    buildCamUI(); $('camProps').hidden = $('camPropThemes').hidden = true; buildCamProps();
     if (state.camProps.length) PBFace.load();
     liveStart();
     await startStream();
@@ -3865,11 +3895,13 @@
       if (typeof content === 'string') b.textContent = content; else b.appendChild(content);
       b.addEventListener('click', click); el.appendChild(b);
     };
-    PBPaint.EFFECTS.forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id && e.id !== 'none',
+    const choices = faceChoices();
+    const th = themeChips($('camPropThemes'), choices.concat(PBPaint.EFFECTS.map(e => ({ kind: 'paint', id: e.id }))), buildCamProps);
+    PBPaint.EFFECTS.filter(e => e.id !== 'none' && inTheme(themeOf('paint', e.id), th)).forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id,
       () => { setPaint(state.facePaint === e.id ? 'none' : e.id); buildCamProps(); }));
     const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep);
     add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
-    faceChoices().forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
+    choices.filter(c => inTheme(themeOf(c.kind, c.id), th)).forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
       state.camProps = hasCamProp(c) ? state.camProps.filter(p => !(p.kind === c.kind && p.id === c.id)) : state.camProps.concat({ kind: c.kind, id: c.id });
       saveSettings(); buildCamProps();
       if (state.camProps.length) PBFace.load();
@@ -3877,7 +3909,7 @@
     $('camPropsBtn').setAttribute('aria-pressed', String(!el.hidden || state.camProps.length > 0));
   }
   $('camPropsBtn').addEventListener('click', () => {
-    $('camProps').hidden = !$('camProps').hidden;
+    $('camPropThemes').hidden = $('camProps').hidden = !$('camProps').hidden;
     buildCamProps();
     if (!$('camProps').hidden) PBFace.load();
   });

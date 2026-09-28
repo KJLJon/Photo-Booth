@@ -26,6 +26,11 @@ Pick the collage size from social-media shapes.
 Easter, Mother's & Father's Day, 4th of July, Diwali, Thanksgiving, Hanukkah, Christmas, Kwanzaa,
 Ramadan & Eid and more). Long lists have a search box ("july", "dad", "december"…).
 
+**Choosing the crop:** with **✂️ Crop to fill**, the save screen shows the whole picture with a
+frame. Drag it to choose what's kept, and pinch or scroll to zoom. Each photo keeps its own crop,
+and **📦 Every size** uses it too. For videos, **✋ Move / zoom the video** lets you drag the clip
+inside its window (and choose the crop for a cropped size) right on the video preview.
+
 **Social media sizes:** the save screen has a row of size buttons (each shows its shape): Original,
 Square 1:1, Portrait 4:5, Story 9:16 (Stories, Reels, TikTok, Snapchat, Shorts), Tall 2:3
 (Pinterest), Landscape 1.91:1, Wide 16:9 (X, YouTube) and 3:2. Tap one and the preview changes.
@@ -37,6 +42,14 @@ Videos can be made in the same sizes.
 - **Photo strips:** a prop sticks to the person in that photo. Retake or replace the photo and it
   jumps onto the new face.
 - **Video clips:** props follow the face frame by frame.
+- **Holiday & dress-up faces**, grouped by theme (the group matching your occasion opens first):
+  🎂 birthday crown, cake hat, party horn and "Happy Birthday" glasses · 🎃 witch hat,
+  jack-o'-lantern mask (your eyes and smile show through), vampire fangs, bat mask · 🦃 pilgrim hat,
+  turkey headband, autumn leaf crown · 🎄 Santa hat, Santa beard, reindeer antlers and red nose, elf hat
+  with ears · 🥂 New Year glasses and tiara with the year on them (next year's in December),
+  masquerade mask · 🇺🇸 stars & stripes hat, flag glasses, star boppers · ☘️ leprechaun hat and beard,
+  shamrock glasses · 🐣 bunny nose & teeth · 💘 heart boppers · 🏴‍☠️ pirate hat and a full pirate face
+  (bandana, eye patch, moustache, goatee, earring).
 - In the sticker studio, 🔗 sticks or unsticks the selected sticker (emoji too), and 👥 copies it
   onto every face. Drag a stuck prop onto another face to move it there.
 
