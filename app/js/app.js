@@ -631,14 +631,14 @@
     bgDim: 0.2, preset: 0,
     filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none',
     collageSize: 'square', collageGap: .025, caption: false, boothStash: null,
-    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur'
+    saveSize: 'orig', saveFit: 'blur', vidSize: 'orig', vidFit: 'blur', appMode: 'photo'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint', 'collageSize', 'collageGap', 'caption', 'boothStash', 'lastCollage', 'lastBooth', 'saveSize', 'saveFit', 'vidSize', 'vidFit', 'appMode'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -1774,7 +1774,7 @@
     if (state.outlineMode === 'auto') $('outlineColor').value = theme.accent;
   });
 
-  $('jump').addEventListener('click', () => $('previewSection').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  $('jump').addEventListener('click', () => $(state.appMode === 'video' ? 'videoSection' : 'previewSection').scrollIntoView({ behavior: 'smooth', block: 'start' }));
 
   // ================= save =================
   let toastTimer;
@@ -2910,7 +2910,11 @@
       onDone: () => schedule()
     });
   }
-  $('openStickers').addEventListener('click', openPhotoStickers);
+  $('openStickers').addEventListener('click', () => {
+    if (state.appMode !== 'video') { openPhotoStickers(); return; }
+    if (!cam.last) { toast('Record a video first, then add stickers to it'); return; }
+    $('vidStickers').click();
+  });
   $('previewStickers').addEventListener('click', openPhotoStickers);
   $('openText').addEventListener('click', () => openPhotoStickers('words'));
   $('previewText').addEventListener('click', () => openPhotoStickers('words'));
@@ -3308,14 +3312,55 @@
     buildCamUI();
   });
   $('camExtra').addEventListener('click', () => { cam.glamBW = !cam.glamBW; buildCamUI(); applyPreview(); });
-  $('openCam').addEventListener('click', () => openCamera());
+  $('openCam').addEventListener('click', () => openCamera({ mode: cam.lastOf.photo || 'booth' }));
   $('openVid').addEventListener('click', () => openCamera({ mode: cam.lastOf.video || 'boomerang' }));
   [...$('camKind').children].forEach(b => b.addEventListener('click', () => {
     if (cam.busy) return;
     const kind = b.dataset.kind; if (camMode().kind === kind) return;
     cam.mode = cam.lastOf[kind] || CAM_MODES.find(m => m.kind === kind).id;
     cam.shots = []; buildCamUI(); applyPreview();
+    setAppMode(kind);                                          // the app follows along
   }));
+
+  // ================= Photos mode vs Video mode =================
+  // Everything shared (occasion, background, message, filters, face paint, stickers) stays; photo-only
+  // settings (photos, layouts, collages, party, save) and video-only ones (clip, music, size) swap.
+  function setAppMode(m) {
+    state.appMode = m === 'video' ? 'video' : 'photo';
+    document.body.classList.toggle('mode-video', state.appMode === 'video');
+    document.body.classList.toggle('mode-photo', state.appMode === 'photo');
+    [...$('appMode').children].forEach(b => b.setAttribute('aria-selected', String(b.dataset.mode === state.appMode)));
+    $('openStickers').textContent = state.appMode === 'video' ? '😎 Video sticker studio' : '😎 Open sticker studio';
+    saveSettings();
+    if (state.appMode === 'video') { buildVidSettings(); drawVideoPreview(); }
+  }
+  [...$('appMode').children].forEach(b => b.addEventListener('click', () => setAppMode(b.dataset.mode)));
+  function buildVidSettings() {
+    const kinds = CAM_MODES.filter(m => m.kind === 'video');
+    chipGroup($('vidKinds'), kinds, m => (cam.lastOf.video || 'boomerang') === m.id, m => {
+      cam.lastOf.video = m.id; buildVidSettings();
+    });
+    const cur = kinds.find(m => m.id === (cam.lastOf.video || 'boomerang'));
+    $('vidKindHint').textContent = videoHint(cur.id);
+    chipGroup($('vidMusicMain'), PBMusic.TUNES, t => (state.music || 'none') === t.id, t => { try { audioCtx(); } catch (e) { /* no audio */ } state.music = t.id; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+    chipGroup($('vidPlainMain'), [{ v: false, label: '🎉 Booth design' }, { v: true, label: '🎥 Just the video' }], o => !!state.vplain === o.v,
+      o => { state.vplain = o.v; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+    fillSizeSelect($('vidSizeMain'), state.vidSize); $('vidFitMain').value = state.vidFit; $('vidFitMain').hidden = state.vidSize === 'orig';
+    const sz = state.vidSize === 'orig' ? 'Original size' : plain(labelOf(SIZES, state.vidSize));
+    const m = PBMusic.TUNES.find(t => t.id === (state.music || 'none'));
+    $('sum-vidsettings').textContent = `${plain(m.label)} · ${sz}`;
+  }
+  $('vidSizeMain').addEventListener('change', (e) => { state.vidSize = e.target.value; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+  $('vidFitMain').addEventListener('change', (e) => { state.vidFit = e.target.value; buildVidSettings(); drawVideoPreview(); saveSettings(); });
+  function videoHint(id) {
+    return { boomerang: 'Records about 1.5 seconds, then loops it back and forth.', strobe: 'Flashing strobe frames stitched into a flickery clip. Dance!',
+      slowmo: 'Records 3 seconds and plays it back in slow motion.', spin: 'Records 6 seconds with a fast–slow–fast speed ramp. Walk around the person, or have them spin.' }[id] || '';
+  }
+  $('vidMain').addEventListener('click', () => {
+    if (!cam.last) { $('openVid').click(); return; }
+    if (vid.url && vid.sig === designSig()) { $('vidOpen').click(); return; }
+    $('vidRemake').click();
+  });
 
   // ================= party mode =================
   // A kiosk for guests: full screen, one big button, 4-shot countdown (with the host's design, stickers
@@ -3886,10 +3931,23 @@
   let vidPrevTimer = 0;
   function videoPreviewSoon() { if (!cam.last) return; clearTimeout(vidPrevTimer); vidPrevTimer = setTimeout(drawVideoPreview, 250); }
   function clipStill(clip) { return clip.frames ? clip.frames[Math.floor(clip.frames.length / 2)] : clip.still; }
+  // before anything is recorded, a stand-in frame shows how the design will look
+  let placeholder = null;
+  function placeholderFrame() {
+    if (placeholder) return placeholder;
+    const c = document.createElement('canvas'); c.width = 640; c.height = 480;
+    const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 480);
+    g.addColorStop(0, '#d8cbe8'); g.addColorStop(1, '#9f8ab8'); x.fillStyle = g; x.fillRect(0, 0, 640, 480);
+    x.fillStyle = 'rgba(255,255,255,.55)';
+    x.beginPath(); x.arc(320, 200, 80, 0, 7); x.fill();
+    x.beginPath(); x.ellipse(320, 470, 170, 150, 0, Math.PI, 0); x.fill();
+    x.fillStyle = '#5b4a73'; x.font = '700 30px system-ui, sans-serif'; x.textAlign = 'center'; x.fillText('Your video goes here', 320, 60);
+    return (placeholder = c);
+  }
   function drawVideoPreview() {
-    const L = cam.last; if (!L) return;
-    $('videoSection').hidden = false;
-    const src = clipStill(L.clip);
+    const L = cam.last;
+    if (state.appMode === 'video') buildVidSettings();
+    const src = L ? clipStill(L.clip) : placeholderFrame();
     if (!src) return;
     const comp = videoComposer(state.vplain); comp.collect = false;
     comp.draw(src, false, { t: 0 });
@@ -3902,6 +3960,9 @@
       ? '✨ You changed the design — tap <b>Remake video</b> to put it in the video.'
       : 'Change the background, message, filters, face paint or stickers above and this preview follows along. Tap <b>Remake video</b> to rebuild it (takes a few seconds).';
     $('vidOpen').disabled = !vid.url;
+    $('vidRemake').disabled = $('vidStickers2').disabled = !L;
+    if (!L) $('vidPrevHint').innerHTML = 'Record a video and it shows up here with your design. Change the background, message, filters and more first if you like.';
+    $('vidMain').textContent = !L ? '🎥 Record a video' : vid.url && !dirty ? '▶️ Open your video' : '🎬 Make the video';
   }
   $('vidRemake').addEventListener('click', () => { try { audioCtx(); } catch (e) { /* no audio */ } buildVideo(); });
   $('vidOpen').addEventListener('click', () => { if (!vid.url) return; $('videoSheet').hidden = false; syncScroll(); $('outVideo').play().catch(() => {}); });
@@ -4045,6 +4106,7 @@
   syncUI();
   buildFilterTiles();
   render();
+  setAppMode(state.appMode);
   restoreClip();
   restorePhotos().then(n => {
     if (!n) return;

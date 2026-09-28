@@ -180,6 +180,11 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .counts-row #countsLabel { font-size: .85rem; font-weight: 700; color: var(--muted); }
 .chips.nums { gap: 5px; }
 .chips.nums .chip { padding: 6px 11px; min-width: 34px; }
+.app-mode { display: inline-flex; margin-top: 10px; background: rgba(255,255,255,.22); border-radius: 999px; padding: 4px; }
+.app-mode button { border: 0; background: none; color: #fff; font-weight: 800; font-size: .95rem; padding: 8px 18px; border-radius: 999px; }
+.app-mode button[aria-selected="true"] { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+body.mode-video .only-photo, body.mode-photo .only-video { display: none !important; }
+.sticky-save .vidbtn { flex: 1; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 #updateBar {
   position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 10px); transform: translateX(-50%); z-index: 60;

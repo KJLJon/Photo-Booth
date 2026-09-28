@@ -25,18 +25,21 @@
 <header>
   <h1>📸 Photo Booth ✨</h1>
   <p>Add photos · make it yours · save</p>
+  <div class="app-mode" id="appMode" role="tablist" aria-label="What are you making?">
+    <button type="button" data-mode="photo" role="tab">📸 Photos</button>
+    <button type="button" data-mode="video" role="tab">🎥 Video</button>
+  </div>
 </header>
 
 <main>
 
-  <section>
+  <section class="only-photo" id="photosSection">
     <h2>📷 Your photos</h2>
     <div class="chips seg" id="boothMode"></div>
     <div class="counts-row"><span id="countsLabel" hidden>Photos:</span><div class="chips" id="counts"></div></div>
     <div class="slots" id="slots"></div>
     <div class="row" style="flex-wrap:nowrap">
-      <button id="openCam" type="button" class="primary" style="flex:1.2 1 auto;padding:12px 8px">📸 Photos</button>
-      <button id="openVid" type="button" class="primary vidbtn" style="flex:1.1 1 auto;padding:12px 8px">🎥 Video</button>
+      <button id="openCam" type="button" class="primary" style="flex:1.4 1 auto;padding:12px 8px">📸 Camera</button>
       <label class="btn" style="flex:1 1 auto;padding:12px 8px">
         🖼️ <span id="multiLabel">Upload</span>
         <input type="file" id="multi" accept="image/*" multiple hidden>
@@ -48,7 +51,33 @@
     <input type="file" id="replaceInput" accept="image/*" hidden>
   </section>
 
-  <details class="card" data-key="party">
+  <section class="only-video" id="videoStart">
+    <h2>🎥 Your video</h2>
+    <div class="chips" id="vidKinds"></div>
+    <p class="hint" id="vidKindHint"></p>
+    <div class="btnrow"><button id="openVid" type="button" class="primary vidbtn">🎥 Record a video</button></div>
+  </section>
+
+  <details class="card only-video" data-key="vidsettings" open>
+    <summary><span>🎵 Music &amp; size</span><span class="val" id="sum-vidsettings"></span></summary>
+    <div class="body">
+      <h3 style="margin-top:0">Music</h3>
+      <div class="chips" id="vidMusicMain"></div>
+      <h3>Picture</h3>
+      <div class="chips" id="vidPlainMain"></div>
+      <h3>Size</h3>
+      <div class="size-row" style="justify-content:flex-start">
+        <label>📐 <select id="vidSizeMain" aria-label="Video size for social media"></select></label>
+        <label><select id="vidFitMain" aria-label="How to fit it">
+          <option value="blur">Fit · blurred edges</option><option value="white">Fit · white edges</option>
+          <option value="black">Fit · black edges</option><option value="fill">Fill · crop to size</option>
+        </select></label>
+      </div>
+      <p class="hint" style="text-align:left">Tap <b>Remake video</b> below after changing these.</p>
+    </div>
+  </details>
+
+  <details class="card only-photo" data-key="party">
     <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
     <div class="body">
       <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
@@ -199,7 +228,7 @@
     </div>
   </details>
 
-  <details class="card" data-key="layout">
+  <details class="card only-photo" data-key="layout">
     <summary><span>🧩 Layout &amp; style</span><span class="val" id="sum-layout"></span></summary>
     <div class="body">
     <h3 style="margin-top:0">Photo booth layouts</h3>
@@ -263,14 +292,14 @@
     </div>
   </details>
 
-  <section id="previewSection">
+  <section id="previewSection" class="only-photo">
     <h2>👀 Preview</h2>
     <div class="preview-wrap"><canvas id="preview"></canvas></div>
     <p class="hint">Tap a photo in the preview to change, move or zoom it.</p>
     <div class="btnrow"><button type="button" id="previewStickers">😎 Stickers &amp; props</button><button type="button" id="previewText">🔤 Add text</button></div>
   </section>
 
-  <section id="videoSection" hidden>
+  <section id="videoSection" class="only-video">
     <h2>🎬 Your video</h2>
     <div class="preview-wrap vid"><canvas id="vidPreview"></canvas></div>
     <p class="hint" id="vidPrevHint">Change the background, message, filters, face paint or stickers above and this preview follows along.
@@ -287,7 +316,8 @@
 
   <div class="sticky-save">
     <button id="jump" type="button" aria-label="Show preview">👀</button>
-    <button class="primary" id="save" type="button" disabled>Add photos to save</button>
+    <button class="primary only-photo" id="save" type="button" disabled>Add photos to save</button>
+    <button class="primary only-video vidbtn" id="vidMain" type="button">🎥 Record a video</button>
   </div>
 </main>
 <div id="toast"></div>
