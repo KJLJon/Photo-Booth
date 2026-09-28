@@ -4134,6 +4134,7 @@
     const reload = () => { if (!reloading) { reloading = true; location.reload(); } };
     // photos are kept on the device, so only something open on screen (camera, editor, a video being made) blocks it
     const busy = () => OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
+    if (/[?&]fresh=/.test(location.search)) history.replaceState(null, '', location.pathname + location.hash);
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!controlled) { controlled = true; return; }            // first install taking over: nothing to refresh
       if (busy()) $('updateBar').hidden = false; else reload();
@@ -4145,6 +4146,47 @@
       const check = () => reg.update().catch(() => {});
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
       setInterval(check, 30 * 60 * 1000);
+      showVersion();
+    });
+
+    // ---- "Check for updates": asks the server which version is current and, if the automatic update
+    // doesn't take over within a few seconds, clears this app's cached files and loads a fresh copy.
+    // (Only this app's caches; photos, designs and other apps on the site are untouched.)
+    const PREFIX = 'birthday-photobooth-';
+    const myVersion = async () => {
+      const k = (await caches.keys()).find(n => n.startsWith(PREFIX) && n !== PREFIX + 'vendor');
+      return k ? k.slice(PREFIX.length) : null;
+    };
+    async function showVersion() {
+      try { const v = await myVersion(); if (v) $('appVersion').textContent = 'Version ' + v.slice(0, 7); } catch (e) { /* no caches */ }
+    }
+    async function freshCopy() {
+      toast('Getting the newest version…');
+      try {
+        for (const k of await caches.keys()) if (k.startsWith(PREFIX) && k !== PREFIX + 'vendor') await caches.delete(k);
+        const reg = await navigator.serviceWorker.getRegistration('./');
+        if (reg) await reg.unregister();
+      } catch (e) { /* carry on with the reload */ }
+      reloading = true;
+      location.replace(location.pathname + '?fresh=' + Date.now());
+    }
+    $('forceUpdate').addEventListener('click', async () => {
+      if (!navigator.onLine) { toast("You're offline — connect to the internet to update"); return; }
+      const btn = $('forceUpdate'); btn.disabled = true; btn.textContent = '🔄 Checking…';
+      try {
+        const text = await (await fetch('sw.js?check=' + Date.now(), { cache: 'no-store' })).text();
+        const m = /CACHE = PREFIX \+ '([^']+)'/.exec(text), latest = m && m[1], mine = await myVersion();
+        if (latest && mine && latest === mine) {
+          if (confirm(`You already have the newest version (${mine.slice(0, 7)}).\nReload a fresh copy anyway?`)) freshCopy();
+          return;
+        }
+        const reg = await navigator.serviceWorker.getRegistration('./');
+        if (reg) { await reg.update().catch(() => {}); if (reg.waiting) reg.waiting.postMessage('skipWaiting'); }
+        toast('Updating…');
+        setTimeout(() => { if (!reloading) freshCopy(); }, 6000);   // didn't switch over by itself
+      } catch (e) {
+        toast("Couldn't reach the server — try again in a moment");
+      } finally { btn.disabled = false; btn.textContent = '🔄 Check for updates'; }
     });
   }
 })();

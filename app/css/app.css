@@ -185,6 +185,7 @@ label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .app-mode button[aria-selected="true"] { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 body.mode-video .only-photo, body.mode-photo .only-video { display: none !important; }
 .sticky-save .vidbtn { flex: 1; }
+.app-foot { text-align: center; font-size: .8rem; color: var(--muted); padding: 18px 16px 90px; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 #updateBar {
   position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 10px); transform: translateX(-50%); z-index: 60;
