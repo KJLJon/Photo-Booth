@@ -2646,7 +2646,7 @@
     { id: 'slowmo', label: '🐢 Slow-mo', kind: 'video', secs: 3 },
     { id: 'spin', label: '🌀 360 spin', kind: 'video', secs: 6 }
   ];
-  const cam = { lastOf: { photo: 'booth', video: 'boomerang' }, stream: null, facing: 'user', mode: 'booth', timer: 3, shots: [], slot: -1, busy: false, cancel: false,
+  const cam = { dzoom: 1, hw: null, deviceId: null, lenses: [], lastOf: { photo: 'booth', video: 'boomerang' }, stream: null, facing: 'user', mode: 'booth', timer: 3, shots: [], slot: -1, busy: false, cancel: false,
     stopEarly: false, recording: false, glamBW: false, audio: null, last: null };
   const camVideo = $('camVideo');
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -2714,7 +2714,7 @@
     }
   }
   function applyPreview() {
-    camVideo.style.transform = cam.facing === 'user' ? 'scaleX(-1)' : 'none';
+    camVideo.style.transform = (cam.facing === 'user' ? 'scaleX(-1) ' : '') + (cam.dzoom > 1 ? `scale(${cam.dzoom})` : '');
     camVideo.style.filter = [PBFilters.css(camFilter()), PBFilters.adjCss(state.adj)].join(' ').trim() || 'none';
   }
 
@@ -2737,11 +2737,13 @@
       return;
     }
     try {
+      const pick = cam.deviceId ? { deviceId: { exact: cam.deviceId } } : { facingMode: cam.facing };
       cam.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cam.facing, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false
+        video: { ...pick, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false
       });
       camVideo.srcObject = cam.stream;
       await camVideo.play().catch(() => {});
+      await setupZoom();
       applyPreview();
     } catch (e) {
       const n = e && e.name;
@@ -2750,6 +2752,98 @@
           : 'The camera could not start (' + (n || 'unknown error') + ').');
     }
   }
+  // ---- zoom: the camera's own zoom where the browser offers it, otherwise a digital (crop) zoom that
+  // also applies to the photos and videos; plus the phone's extra lenses (ultra wide / telephoto) ----
+  async function setupZoom() {
+    const track = cam.stream && cam.stream.getVideoTracks()[0];
+    const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+    cam.track = track;
+    cam.hw = caps.zoom && caps.zoom.max > caps.zoom.min ? { min: caps.zoom.min, max: caps.zoom.max } : null;
+    cam.hwZoom = cam.hw ? (track.getSettings().zoom || cam.hw.min) : 1;
+    if (cam.hw) cam.dzoom = 1;
+    // lens list: only labelled lenses (iPhone style "Back Ultra Wide Camera") are offered
+    try {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && d.label);
+      const back = devs.filter(d => /back|rear|environment/i.test(d.label));
+      const find = (re) => back.find(d => re.test(d.label));
+      const wide = find(/ultra ?wide/i), tele = find(/tele/i), main = back.find(d => /^back camera$/i.test(d.label.trim())) || find(/back camera/i);
+      cam.lenses = cam.facing === 'environment' && (wide || tele) && main
+        ? [wide && { label: '.5', id: wide.deviceId }, { label: '1×', id: main.deviceId }, tele && { label: /3/.test(tele.label) ? '3×' : '2×', id: tele.deviceId, tele: true }].filter(Boolean)
+        : [];
+    } catch (e) { cam.lenses = []; }
+    buildZoomUI();
+  }
+  const zoomNow = () => (cam.hw ? cam.hwZoom : cam.dzoom || 1);
+  let zoomBusy = false, zoomWant = null, zoomLabelT = 0;
+  function setZoom(z, quiet) {
+    if (cam.hw) {
+      z = clamp(z, cam.hw.min, cam.hw.max); cam.hwZoom = z;
+      zoomWant = z;
+      if (!zoomBusy) {
+        const go = () => {
+          if (zoomWant == null || !cam.track) { zoomBusy = false; return; }
+          const v = zoomWant; zoomWant = null; zoomBusy = true;
+          cam.track.applyConstraints({ advanced: [{ zoom: v }] }).catch(() => {}).finally(go);
+        };
+        go();
+      }
+    } else {
+      cam.dzoom = clamp(z, 1, 5); applyPreview();
+    }
+    if (!quiet) {
+      const lab = $('camZoomLabel'); lab.textContent = zoomNow().toFixed(1).replace(/\.0$/, '') + '×'; lab.hidden = false;
+      clearTimeout(zoomLabelT); zoomLabelT = setTimeout(() => { lab.hidden = true; }, 900);
+    }
+    markZoom();
+  }
+  function buildZoomUI() {
+    const el = $('camZoom'); el.innerHTML = '';
+    const btn = (label, on, fn) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.dataset.label = label;
+      b.addEventListener('click', fn); el.appendChild(b);
+    };
+    cam.lenses.forEach(l => btn(l.label, false, async () => {
+      if (cam.busy || cam.deviceId === l.id) return;
+      cam.deviceId = l.id; cam.dzoom = 1; await startStream();
+    }));
+    const base = cam.hw ? Math.max(1, cam.hw.min) : 1, top = cam.hw ? cam.hw.max : 5;
+    [1, 2, 3, 5].filter(v => v * base <= top + .01).forEach(v => {
+      const label = v + '×';
+      if (cam.lenses.some(l => l.label === label)) return;
+      btn(label, false, () => { if (cam.lenses.length && cam.deviceId !== (cam.lenses.find(l => l.label === '1×') || {}).id) { cam.deviceId = cam.lenses.find(l => l.label === '1×').id; cam.dzoom = v; startStream().then(() => setZoom(v * base)); return; } setZoom(v * base); });
+    });
+    markZoom();
+  }
+  function markZoom() {
+    const lens = cam.lenses.find(l => l.id === cam.deviceId);
+    const z = zoomNow() / (cam.hw ? Math.max(1, cam.hw.min) : 1);
+    [...$('camZoom').children].forEach(b => {
+      const L = b.dataset.label;
+      const on = lens && lens.label !== '1×' ? L === lens.label : Math.abs(parseFloat(L) - z) < .25 && L !== '.5';
+      b.setAttribute('aria-pressed', String(!!on));
+    });
+  }
+  // pinch (or scroll) on the camera picture to zoom
+  (() => {
+    const area = $('camera'), pts = new Map();
+    let d0 = 0, z0 = 1;
+    const onPicture = (e) => e.target === camVideo || e.target === camOverlay || e.target === area;
+    area.addEventListener('pointerdown', (e) => {
+      if (!onPicture(e)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; d0 = Math.hypot(a.x - b.x, a.y - b.y); z0 = zoomNow(); }
+    });
+    area.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2 && d0 > 10) { const [a, b] = [...pts.values()]; setZoom(z0 * Math.hypot(a.x - b.x, a.y - b.y) / d0); }
+    });
+    const end = (e) => { pts.delete(e.pointerId); if (pts.size < 2) d0 = 0; };
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => area.addEventListener(t, end));
+    area.addEventListener('wheel', (e) => { if (!onPicture(e)) return; e.preventDefault(); setZoom(zoomNow() * Math.exp(-e.deltaY * .002)); }, { passive: false });
+    camVideo.style.touchAction = 'none';                      // the page mustn't zoom instead
+  })();
+
   function stopStream() {
     if (cam.stream) cam.stream.getTracks().forEach(t => t.stop());
     cam.stream = null; camVideo.srcObject = null;
@@ -2798,11 +2892,12 @@
   function grabFrame(max) {
     const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
     if (!vw) return null;
-    const sc = Math.min(1, max / Math.max(vw, vh));
-    const c = document.createElement('canvas'); c.width = Math.round(vw * sc); c.height = Math.round(vh * sc);
+    const z = cam.dzoom || 1, sw = vw / z, sh = vh / z;          // digital zoom keeps the middle
+    const sc = Math.min(1, max / Math.max(sw, sh));
+    const c = document.createElement('canvas'); c.width = Math.round(sw * sc); c.height = Math.round(sh * sc);
     const x = c.getContext('2d');
     if (cam.facing === 'user') { x.translate(c.width, 0); x.scale(-1, 1); }
-    x.drawImage(camVideo, 0, 0, c.width, c.height);
+    x.drawImage(camVideo, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, c.width, c.height);
     return c;
   }
   function thumbOf(c) {
@@ -2920,6 +3015,7 @@
   $('camFlip').addEventListener('click', async () => {
     if (cam.busy) return;
     cam.facing = cam.facing === 'user' ? 'environment' : 'user';
+    cam.deviceId = null; cam.dzoom = 1;
     await startStream();
   });
   $('camTimer').addEventListener('click', () => {
@@ -3135,7 +3231,7 @@
     const raw = PBFace.detect(camVideo) || [];
     live.count = raw.length;
     // video pixels → screen: the preview is object-fit: cover, and mirrored for the selfie camera
-    const k = Math.max(cw / vw, ch / vh), ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2, mirror = cam.facing === 'user';
+    const k = Math.max(cw / vw, ch / vh) * (cam.dzoom || 1), ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2, mirror = cam.facing === 'user';
     const map = (q) => ({ x: mirror ? cw - (q.x * k + ox) : q.x * k + ox, y: q.y * k + oy });
     if (paintOn() && PBFace.meshReady()) {
       // paint needs the face underneath it (it blends with the skin) and must match this exact frame,
@@ -3264,7 +3360,7 @@
     rec.stop(); await stopped;
     cam.recording = false; $('camRec').hidden = true;
     if (cam.cancel) throw new Error('cancel');
-    return { blob: new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' }), secs: Math.min(secs, el), still: still || grabFrame(720) };
+    return { blob: new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' }), secs: Math.min(secs, el), still: still || grabFrame(720), zoom: cam.dzoom || 1 };
   }
 
   // Renders frames into a 720×1280 framed picture: background, caption, photo frame, stickers.
@@ -3294,13 +3390,14 @@
       // faces found in the last frame, in picture coordinates
       facesOf(raw) { return raw ? placeFaces(raw, photoXform(holder, L.rects[0], jit, L.border), 0, W, H) : null; },
       draw(src, mirror, opts = {}) {
-        const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
-        if (!sw) return;
+        const fw = src.videoWidth || src.width, fh = src.videoHeight || src.height;
+        if (!fw) return;
+        const z = opts.zoom || 1, sw = fw / z, sh = fh / z;         // digital zoom from the camera
         const sc = Math.min(1, (plain ? 1280 : 720) / Math.max(sw, sh)), w = Math.round(sw * sc), h = Math.round(sh * sc);
         if (frame.width !== w || frame.height !== h) { frame.width = w; frame.height = h; }
         fctx.save();
         if (mirror) { fctx.translate(w, 0); fctx.scale(-1, 1); }
-        fctx.drawImage(src, 0, 0, w, h);
+        fctx.drawImage(src, (fw - sw) / 2, (fh - sh) / 2, sw, sh, 0, 0, w, h);
         fctx.restore();
         if (opts.keepRaw) {                                    // an unfiltered copy, to look for faces in later
           comp.raw = document.createElement('canvas'); comp.raw.width = w; comp.raw.height = h;
@@ -3454,7 +3551,7 @@
       const v = cv.v, secs = clip.secs;
       const rateAt = (t) => { const f = t / secs; return m.id === 'slowmo' ? (f < .15 ? 1 : .5) : (f < .2 ? 1.5 : f < .72 ? .5 : 1.75); };
       try {
-        comp.draw(v, mirror, { t: 0 });
+        comp.draw(v, mirror, { t: 0, zoom: clip.zoom });
         const blob = await recordCanvas(comp.out, 30, () => new Promise((resolve) => {
           let done = false;
           const guard = setTimeout(() => finish(), (secs / .5 + 4) * 1000);
@@ -3468,7 +3565,7 @@
             if (done) return;
             const t = v.currentTime, r = rateAt(t);
             if (Math.abs(v.playbackRate - r) > .01) v.playbackRate = r;
-            comp.draw(v, mirror, { t: performance.now() - t0 });
+            comp.draw(v, mirror, { t: performance.now() - t0, zoom: clip.zoom });
             pct(t / secs);
             if (t >= secs - .04 || (v.paused && t > 0.2)) { finish(); return; }
             requestAnimationFrame(tick);
