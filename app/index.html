@@ -42,15 +42,37 @@
       <button id="rotate" type="button" style="flex:0 0 auto;padding:12px 14px" aria-label="Reorder photos">🔄</button>
     </div>
     <input type="file" id="nativeCam" accept="image/*" capture="user" hidden>
-    <p class="hint">Tap a photo to replace, move, zoom or remove it.</p>
+    <p class="hint">Tap a photo to replace, move, zoom or remove it. <button type="button" class="linkbtn" id="startOver">Start over</button></p>
     <input type="file" id="replaceInput" accept="image/*" hidden>
   </section>
+
+  <details class="card" data-key="party">
+    <summary><span>🎉 Party mode</span><span class="val" id="sum-party"></span></summary>
+    <div class="body">
+      <p class="swipe-hint" style="font-size:.85rem">Set up your design, then hand the phone or tablet to your guests: full screen, one big button,
+        4-shot countdown, and their strip ready to share or print. Every strip is kept in the party gallery on this device.</p>
+      <div class="btnrow">
+        <button type="button" class="primary" id="partyStart">🎉 Start party mode</button>
+        <button type="button" id="galleryOpen">📚 Gallery</button>
+      </div>
+    </div>
+  </details>
 
   <details class="card" data-key="filters">
     <summary><span>🪄 Filters</span><span class="val" id="sum-filters"></span></summary>
     <div class="body">
       <p class="swipe-hint">Applies to every photo · tap a photo to give just that one its own filter. Swipe for more →</p>
       <div class="tgrid ftiles" id="filterTiles"></div>
+      <h3>🎨 Face paint</h3>
+      <div class="chips hscroll" id="paintChips" style="grid-template-rows:auto"></div>
+      <h3>🧍 Background behind people</h3>
+      <div class="chips hscroll" id="swapChips" style="grid-template-rows:auto"></div>
+      <input type="file" id="swapFile" accept="image/*" hidden>
+      <p class="hint" style="text-align:left" id="swapNote"></p>
+      <h3>Adjust <button type="button" class="linkbtn" id="adjReset" style="float:right;font-size:.8rem">Reset</button></h3>
+      <label class="field slider">☀️ Brightness <input type="range" id="adj-b" min="-1" max="1" step="0.05" value="0"></label>
+      <label class="field slider">◐ Contrast <input type="range" id="adj-c" min="-1" max="1" step="0.05" value="0"></label>
+      <label class="field slider">🎨 Color <input type="range" id="adj-s" min="-1" max="1" step="0.05" value="0"></label>
     </div>
   </details>
 
@@ -71,6 +93,10 @@
     <div class="body">
     <p class="swipe-hint">Sets the background, message, icons and font — change anything after. Swipe for more →</p>
     <div class="chips hscroll" id="presets"></div>
+    <h3>⭐ My designs</h3>
+    <div class="chips" id="designs"></div>
+    <div class="btnrow" style="margin-top:8px"><button type="button" id="designSave">＋ Save this design</button><button type="button" id="designShare">🔗 Share as a link</button></div>
+    <p class="hint" style="text-align:left">Saves the background, message, layout, frames, filters and stickers (not the photos) on this device.</p>
     </div>
   </details>
   <details class="card" data-key="background">
@@ -261,16 +287,19 @@
 
 <div id="camera" hidden>
   <video id="camVideo" playsinline muted autoplay></video>
+  <canvas id="camOverlay"></canvas>
   <div id="camFlash"></div>
   <div id="camCount" hidden></div>
   <div id="camRec" hidden>● REC</div>
   <div class="cam-top">
     <button class="cam-btn" id="camClose" type="button" aria-label="Close camera">✕</button>
     <div class="title" id="camTitle">Photo booth</div>
+    <button class="cam-btn" id="camPropsBtn" type="button" aria-label="Face props" aria-pressed="false">😎</button>
     <button class="cam-btn" id="camFlip" type="button" aria-label="Switch camera">🔄</button>
   </div>
   <div class="cam-bottom">
     <div id="camShots"></div>
+    <div class="cam-strip props" id="camProps" hidden></div>
     <div class="cam-strip small" id="camFilters"></div>
     <div class="cam-strip" id="camModes"></div>
     <div class="cam-controls">
@@ -309,7 +338,8 @@
   <div class="sheet">
     <h2>Your video is ready 🎬</h2>
     <div class="chips save-modes" id="vidModes"></div>
-    <video id="outVideo" controls loop playsinline muted></video>
+    <video id="outVideo" controls loop playsinline></video>
+    <div class="chips save-modes music" id="vidMusic"></div>
     <p class="hint" id="videoHint"></p>
     <div class="btnrow">
       <a class="btn primary" id="vidDl" href="#" download>⬇️ Video</a>
@@ -327,9 +357,48 @@
   </div>
 </div>
 
+<div id="party" hidden>
+  <div class="party-attract" id="partyAttract">
+    <div class="party-emoji" aria-hidden="true">📸</div>
+    <div class="party-title" id="partyTitle"></div>
+    <div class="party-sub">Grab your friends &amp; strike a pose!</div>
+    <button type="button" class="party-go" id="partyGo">Tap to start</button>
+    <div class="party-note" id="partyNote"></div>
+  </div>
+  <div class="party-result" id="partyResult" hidden>
+    <img id="partyImg" alt="Your photo strip">
+    <div class="party-side">
+      <div class="party-title small">Looking good! 🎉</div>
+      <button type="button" class="party-btn primary" id="partyShare">📤 Send to my phone</button>
+      <button type="button" class="party-btn" id="partyPrint">🖨️ Print</button>
+      <button type="button" class="party-btn" id="partyDone">✓ Done</button>
+      <div class="party-qr"><canvas id="partyQR" width="148" height="148"></canvas><span>Scan to make your own</span></div>
+      <div class="party-note" id="partyTimer"></div>
+    </div>
+  </div>
+  <button type="button" class="party-exit" id="partyExit" aria-label="Hold to leave party mode" title="Hold to leave party mode">✕</button>
+</div>
+
+<div id="gallery" class="overlay" hidden>
+  <div class="sheet">
+    <h2>📚 Party gallery</h2>
+    <p class="hint" id="galleryHint"></p>
+    <div class="gallery-grid" id="galleryGrid"></div>
+    <div class="btnrow">
+      <button type="button" id="galleryShare">📤 Share all</button>
+      <button type="button" id="galleryClear" class="danger">🗑️ Delete all</button>
+    </div>
+    <button type="button" class="cancel" id="galleryClose">Close</button>
+  </div>
+</div>
+
 <div id="stickerEd" hidden>
   <div class="ed-top">
-    <button id="stClear" type="button">🗑 Clear</button>
+    <div class="ed-left">
+      <button id="stUndo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>↶</button>
+      <button id="stRedo" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
+      <button id="stClear" type="button" aria-label="Remove all stickers" title="Remove all stickers">🗑</button>
+    </div>
     <div style="text-align:center">
       <div class="title">Stickers &amp; props</div>
       <div class="sub" id="stSub">Drag · pinch or use the corner ↻ to resize &amp; turn</div>
@@ -354,6 +423,7 @@
     </div>
     <div class="st-style">
       <div class="st-row"><span class="lbl">Outline</span><div class="swatches" id="stBorders"></div></div>
+      <div class="st-row" id="stAnimRow" hidden><span class="lbl">Motion</span><div class="chips" id="stAnims"></div></div>
       <div id="stTextRow" hidden>
         <div class="st-row"><span class="lbl">Color</span><div class="swatches" id="stColors"></div></div>
         <div class="st-row"><span class="lbl">Font</span><div class="chips" id="stFonts"></div></div>
@@ -365,8 +435,21 @@
     <div class="st-cats" id="stCats" hidden>
       <input type="search" id="stSearch" placeholder="Search emoji" autocomplete="off" enterkeyhint="search">
       <div class="chips" id="stCatChips"></div>
+      <div class="chips tones" id="stTones"></div>
     </div>
     <div class="st-items" id="stItems"></div>
+  </div>
+</div>
+
+<div id="textSheet" class="overlay" hidden>
+  <div class="sheet">
+    <h2 id="txtTitle">Add your text</h2>
+    <textarea id="txtInput" rows="3" maxlength="120" placeholder="Type something… (Enter for a new line)"></textarea>
+    <label class="field slider">🌈 Curve <input type="range" id="txtCurve" min="-1" max="1" step="0.05" value="0"></label>
+    <div class="btnrow">
+      <button type="button" id="txtCancel">Cancel</button>
+      <button type="button" id="txtOk" class="primary">✓ Done</button>
+    </div>
   </div>
 </div>
 
@@ -380,6 +463,7 @@
     <div class="row">
       <a class="btn primary" id="dlBtn" href="#" download>⬇️ Save to device</a>
       <button id="shareBtn" type="button">📤 Share</button>
+      <button id="printBtn" type="button">🖨️ Print</button>
     </div>
     <button id="sheetClose" type="button">Close</button>
   </div>
@@ -410,7 +494,10 @@
 <script src="stickers/stickers.js"></script>
 <script src="js/emoji-data.js"></script>
 <script src="js/encoders.js"></script>
+<script src="js/music.js"></script>
 <script src="js/face.js"></script>
+<script src="js/facepaint.js"></script>
+<script src="js/lib/qrcode.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

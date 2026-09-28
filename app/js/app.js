@@ -591,14 +591,14 @@
     edge: 'none', edgeColor: '#ffffff', edgeSize: 2,
     custom: { c1: '#ff9a8b', c2: '#7f53ac', deco: 'confetti', decoColor: 'bright' },
     bgDim: 0.2, preset: 0,
-    filter: 'none', stickerSets: {}, vstickers: [], vplain: false
+    filter: 'none', stickerSets: {}, vstickers: [], vplain: false, camProps: [], adj: { b: 0, c: 0, s: 0 }, tone: '', bgSwap: 'none', music: 'none', facePaint: 'none'
   };
   let bgImage = null;
 
   const SETTINGS_KEY = 'photobooth-settings-v1';
   const SAVED_KEYS = ['count', 'theme', 'layout', 'style', 'shape', 'seed', 'line1', 'line2', 'font', 'textMode', 'textColor',
     'outlineMode', 'outlineColor', 'iconLeft', 'iconRight', 'iconPos', 'frame', 'frameColor', 'frameSize', 'shadow',
-    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain'];
+    'edge', 'edgeColor', 'edgeSize', 'custom', 'bgDim', 'preset', 'filter', 'stickerSets', 'vstickers', 'vplain', 'camProps', 'adj', 'tone', 'bgSwap', 'music', 'facePaint'];
   function loadSettings() {
     try {
       const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
@@ -613,6 +613,7 @@
       if (state.frame === 'none') { state.frame = 'white'; state.frameSize = 0; }
       if (!FONTS[state.font]) state.font = 'playful';
       if (state.theme === 'photo') state.theme = 'confetti'; // background photo isn't stored
+      if (state.bgSwap === 'custom') state.bgSwap = 'none';  // nor is the swap picture
     } catch (e) { /* storage unavailable */ }
   }
   function saveSettings() {
@@ -739,11 +740,143 @@
   // the filtered copy is cached on the photo so each filter is only computed once
   function photoSource(p) {
     if (p.raw) return p.canvas;
-    const id = p.filter || state.filter;
-    if (!id || id === 'none') return p.canvas;
-    if (!p._f || p._f.id !== id) p._f = { id, canvas: PBFilters.apply(p.canvas, id) };
-    return p._f.canvas;
+    const id = p.filter || state.filter, adj = state.adj, key = id + '|' + JSON.stringify(adj);
+    let out = p.canvas;
+    if ((id && id !== 'none') || PBFilters.hasAdj(adj)) {
+      if (!p._f || p._f.key !== key) p._f = { key, canvas: PBFilters.apply(p.canvas, id, null, adj) };
+      out = p._f.canvas;
+    }
+    return paintFaces(p, swapBackground(p, out, key), key);
   }
+
+  // ================= background swap =================
+  // People are cut out with MediaPipe's selfie segmenter and put in front of a new scene.
+  const SCENES = [
+    { id: 'none', label: '🖼️ Original' }, { id: 'blur', label: '💨 Blur' }, { id: 'booth', label: '🎉 Booth design' },
+    { id: 'beach', label: '🏖️ Beach' }, { id: 'space', label: '🚀 Space' }, { id: 'disco', label: '🪩 Disco' },
+    { id: 'rainbow', label: '🌈 Rainbow' }, { id: 'studio', label: '📷 Studio' }, { id: 'custom', label: '🖼️ Your picture' }
+  ];
+  let swapImage = null, swapImageId = 0;
+  function lin(ctx, y0, y1, stops) { const g = ctx.createLinearGradient(0, y0, 0, y1); stops.forEach(([o, c]) => g.addColorStop(o, c)); return g; }
+  function drawScene(ctx, w, h, id, src) {
+    const r = mulberry32(state.seed + 5);
+    if (id === 'blur') {
+      // tiny copy stretched back up = a soft blur that works in every browser
+      const t = document.createElement('canvas'); t.width = Math.max(1, Math.round(w / 24)); t.height = Math.max(1, Math.round(h / 24));
+      t.getContext('2d').drawImage(src, 0, 0, t.width, t.height);
+      ctx.imageSmoothingQuality = 'high'; ctx.drawImage(t, 0, 0, w, h);
+    } else if (id === 'booth') {
+      THEMES[state.theme].draw(ctx, w, h, themeRng(state.theme + 'swap'));
+    } else if (id === 'custom' && swapImage) {
+      const k = Math.max(w / swapImage.width, h / swapImage.height), dw = swapImage.width * k, dh = swapImage.height * k;
+      ctx.drawImage(swapImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    } else if (id === 'beach') {
+      ctx.fillStyle = lin(ctx, 0, h * .62, [[0, '#4fb3ff'], [1, '#bfe6ff']]); ctx.fillRect(0, 0, w, h * .62);
+      ctx.fillStyle = '#fff3a8'; ctx.beginPath(); ctx.arc(w * .78, h * .2, Math.min(w, h) * .09, 0, 7); ctx.fill();
+      ctx.fillStyle = lin(ctx, h * .55, h * .75, [[0, '#1c8fd6'], [1, '#48c1e8']]); ctx.fillRect(0, h * .55, w, h * .2);
+      ctx.fillStyle = lin(ctx, h * .72, h, [[0, '#f7dc9c'], [1, '#e9c27a']]); ctx.fillRect(0, h * .72, w, h * .28);
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = Math.max(2, h * .006);
+      for (let i = 0; i < 6; i++) { const y = h * (.58 + i * .025); ctx.beginPath(); ctx.moveTo(w * r(), y); ctx.lineTo(w * r(), y); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(255,255,255,.95)';
+      for (let i = 0; i < 3; i++) cloud(ctx, w * (.08 + .22 * i + r() * .06), h * (.07 + r() * .14), Math.min(w, h) * .05);
+    } else if (id === 'space') {
+      ctx.fillStyle = lin(ctx, 0, h, [[0, '#07031a'], [.6, '#1b0b45'], [1, '#3a1070']]); ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 260; i++) { ctx.fillStyle = `rgba(255,255,255,${.3 + r() * .7})`; ctx.fillRect(w * r(), h * r(), 1 + r() * 2.5, 1 + r() * 2.5); }
+      const R = Math.min(w, h) * .16;
+      const g = ctx.createRadialGradient(w * .2 - R * .3, h * .75 - R * .3, R * .2, w * .2, h * .75, R);
+      g.addColorStop(0, '#ffb86b'); g.addColorStop(1, '#c2410c'); ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(w * .2, h * .75, R, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,220,180,.8)'; ctx.lineWidth = R * .08;
+      ctx.beginPath(); ctx.ellipse(w * .2, h * .75, R * 1.6, R * .35, -.3, 0, 7); ctx.stroke();
+    } else if (id === 'disco') {
+      ctx.fillStyle = lin(ctx, 0, h, [[0, '#1a0633'], [1, '#4a0d67']]); ctx.fillRect(0, 0, w, h);
+      const cols = ['#ff5fa2', '#7ad7ff', '#ffd23f', '#8ac926', '#b388ff'];
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 7; i++) {
+        ctx.fillStyle = cols[i % cols.length] + '40'; ctx.beginPath();
+        ctx.moveTo(w / 2, 0); const a = -1.2 + i * .4;
+        ctx.lineTo(w / 2 + Math.sin(a - .07) * h * 1.5, Math.cos(a - .07) * h * 1.5); ctx.lineTo(w / 2 + Math.sin(a + .07) * h * 1.5, Math.cos(a + .07) * h * 1.5); ctx.fill();
+      }
+      for (let i = 0; i < 70; i++) { ctx.fillStyle = cols[i % cols.length] + 'aa'; ctx.beginPath(); ctx.arc(w * r(), h * r(), 2 + r() * Math.min(w, h) * .012, 0, 7); ctx.fill(); }
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (id === 'rainbow') {
+      ctx.fillStyle = lin(ctx, 0, h, [[0, '#fff1f7'], [1, '#e8f4ff']]); ctx.fillRect(0, 0, w, h);
+      const cols = ['#ff595e', '#ff924c', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93'], R = Math.max(w, h) * .75, lw = R * .07;
+      ctx.lineWidth = lw; cols.forEach((c, i) => { ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(w / 2, h * 1.05, R - i * lw, Math.PI, 0); ctx.stroke(); });
+    } else {
+      const g = ctx.createRadialGradient(w / 2, h * .4, Math.min(w, h) * .1, w / 2, h * .5, Math.max(w, h) * .8);
+      g.addColorStop(0, '#9aa3b5'); g.addColorStop(1, '#2d3240'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    }
+  }
+  // person (from `src`, already filtered) in front of the chosen scene; `mask` is the person cut-out
+  function composeSwap(src, mask, out) {
+    const w = src.width, h = src.height;
+    out = out || document.createElement('canvas');
+    if (out.width !== w || out.height !== h) { out.width = w; out.height = h; }
+    const ctx = out.getContext('2d');
+    ctx.globalCompositeOperation = 'source-over';
+    drawScene(ctx, w, h, state.bgSwap, src);
+    const person = composeSwap.tmp || (composeSwap.tmp = document.createElement('canvas'));
+    person.width = w; person.height = h;
+    const pc = person.getContext('2d');
+    pc.drawImage(src, 0, 0);
+    pc.globalCompositeOperation = 'destination-in'; pc.imageSmoothingQuality = 'high';
+    pc.drawImage(mask, 0, 0, w, h);
+    pc.globalCompositeOperation = 'source-over';
+    ctx.drawImage(person, 0, 0);
+    return out;
+  }
+  function swapBackground(p, src, key) {
+    const id = state.bgSwap;
+    if (!id || id === 'none' || (id === 'custom' && !swapImage)) return src;
+    if (p._mask === undefined) {
+      p._mask = null;                                            // working on it
+      PBFace.loadSegmenter().then(ok => { p._mask = ok ? PBFace.personMask(p.canvas) : false; schedule(); });
+    }
+    if (!p._mask) return src;
+    const k = [key, id, state.theme, state.seed, swapImageId].join('|');
+    if (!p._sw || p._sw.key !== k) p._sw = { key: k, canvas: composeSwap(src, p._mask) };
+    return p._sw.canvas;
+  }
+  // ---- face paint (js/facepaint.js), placed with the detailed face finder ----
+  const paintOn = () => state.facePaint && state.facePaint !== 'none';
+  function paintFaces(p, src, key) {
+    if (!paintOn()) return src;
+    if (p._mesh === undefined) {
+      p._mesh = null;
+      PBFace.loadMesh().then(ok => { p._mesh = ok ? PBFace.meshes(p.canvas) || [] : false; schedule(); });
+    }
+    if (!p._mesh || !p._mesh.length) return src;
+    const k = [key, state.bgSwap, state.theme, swapImageId, state.facePaint].join('|');
+    if (!p._fpc || p._fpc.key !== k) {
+      const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+      const ctx = c.getContext('2d'); ctx.drawImage(src, 0, 0);
+      p._mesh.forEach(m => PBPaint.draw(ctx, m.map(q => ({ x: q.x * c.width, y: q.y * c.height })), state.facePaint));
+      p._fpc = { key: k, canvas: c };
+    }
+    return p._fpc.canvas;
+  }
+  function setPaint(id) {
+    state.facePaint = id; schedule(); buildPaintChips();
+    if (id !== 'none') { PBFace.loadMesh(); if (!PBFace.meshReady()) toast('🎨 Getting face paint ready…'); }
+  }
+  function buildPaintChips() {
+    chipGroup($('paintChips'), PBPaint.EFFECTS, e => (state.facePaint || 'none') === e.id, e => setPaint(e.id));
+  }
+  function buildSwapChips() {
+    chipGroup($('swapChips'), SCENES, s => state.bgSwap === s.id, s => {
+      if (s.id === 'custom' && !swapImage) { $('swapFile').click(); return; }
+      state.bgSwap = s.id; buildSwapChips(); schedule();
+      if (s.id !== 'none') { PBFace.loadSegmenter(); toast('✂️ Cutting people out… (first time downloads the tools)'); }
+    });
+    $('swapNote').textContent = state.bgSwap !== 'none' && PBFace.status === 'loading' ? `Getting ready… ${Math.round(PBFace.progress * 100)}%` : '';
+  }
+  $('swapFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try { const p = await loadFile(f, 1800); swapImage = p.canvas; swapImageId++; state.bgSwap = 'custom'; buildSwapChips(); schedule(); PBFace.loadSegmenter(); }
+    catch (err) { toast("Couldn't open that picture"); }
+  });
 
   // ================= drawing =================
   const EDGE_COLORS = FRAME_COLORS;
@@ -942,7 +1075,74 @@
     btn.textContent = missing ? `Add ${missing} more photo${missing === 1 ? '' : 's'} to save` : '💾 Save photo';
     if (typeof updateSummaries === 'function') updateSummaries();
     saveSettings();
+    keepPhotosSoon();
   }
+
+  // ================= keep photos across reloads =================
+  // Photos live in IndexedDB on this device, so closing the app, a crash or an update never loses them.
+  // IndexedDB is shared by every app on the same github.io site, hence the app-specific database name.
+  const PDB = 'birthday-photobooth', PSTORE = 'photos';
+  let pdb = null;
+  function photoDB() {
+    if (!pdb) pdb = new Promise((res, rej) => {
+      const r = indexedDB.open(PDB, 2);
+      r.onupgradeneeded = () => {
+        for (const n of [PSTORE, 'strips']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n, n === 'strips' ? { autoIncrement: true } : undefined);
+      };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return pdb;
+  }
+  function photoTx(mode, fn, store) {
+    return photoDB().then(d => new Promise((res, rej) => {
+      const tx = d.transaction(store || PSTORE, mode), req = fn(tx.objectStore(store || PSTORE));
+      tx.oncomplete = () => res(req && req.result); tx.onerror = tx.onabort = () => rej(tx.error);
+    }));
+  }
+  const keptSig = [];
+  let keepTimer = 0;
+  function keepPhotosSoon() { clearTimeout(keepTimer); keepTimer = setTimeout(keepPhotos, 600); }
+  async function keepPhotos() {
+    if (!window.indexedDB) return;
+    try {
+      for (let i = 0; i < 4; i++) {
+        const p = state.photos[i];
+        const sig = p ? [p.url, p.zoom, p.cx, p.cy, p.filter].join('|') : '';
+        if (keptSig[i] === sig) continue;
+        keptSig[i] = sig;
+        if (!p) { await photoTx('readwrite', s => s.delete('slot' + i)); continue; }
+        if (!p._blob) p._blob = await new Promise(r => p.canvas.toBlob(r, 'image/jpeg', 0.92));
+        const rec = { blob: p._blob, zoom: p.zoom, cx: p.cx, cy: p.cy, filter: p.filter };
+        await photoTx('readwrite', s => s.put(rec, 'slot' + i));
+      }
+    } catch (e) { /* storage full or blocked (private mode): photos just won't survive a reload */ }
+  }
+  async function restorePhotos() {
+    if (!window.indexedDB) return 0;
+    let n = 0;
+    try {
+      for (let i = 0; i < 4; i++) {
+        const rec = await photoTx('readonly', s => s.get('slot' + i));
+        if (!rec || !rec.blob || state.photos[i]) continue;
+        const bmp = await createImageBitmap(rec.blob);
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d').drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
+        const p = { canvas: c, url: URL.createObjectURL(rec.blob), zoom: rec.zoom || 1, cx: rec.cx, cy: rec.cy, filter: rec.filter || null, _blob: rec.blob };
+        state.photos[i] = p;
+        keptSig[i] = [p.url, p.zoom, p.cx, p.cy, p.filter].join('|');
+        n++;
+      }
+    } catch (e) { /* nothing saved, or storage blocked */ }
+    return n;
+  }
+  $('startOver').addEventListener('click', () => {
+    if (!state.photos.some(Boolean)) { toast('Nothing to clear'); return; }
+    if (!confirm('Remove all photos and start a new strip? (Your design and stickers stay.)')) return;
+    state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
+    state.photos = [null, null, null, null];
+    buildSlots(); schedule();
+  });
+
   let pending = false;
   function schedule() {
     if (pending) return;
@@ -1002,6 +1202,75 @@
       syncUI(); schedule();
     });
   }
+
+  // ---- brightness / contrast / colour ----
+  ['b', 'c', 's'].forEach(k => $('adj-' + k).addEventListener('input', (e) => {
+    state.adj = { ...state.adj, [k]: +e.target.value }; schedule();
+  }));
+  $('adjReset').addEventListener('click', () => { state.adj = { b: 0, c: 0, s: 0 }; syncAdj(); schedule(); });
+  function syncAdj() { ['b', 'c', 's'].forEach(k => { $('adj-' + k).value = (state.adj && state.adj[k]) || 0; }); }
+
+  // ---- my designs: everything except the photos, saved on this device ----
+  const DESIGNS_KEY = 'photobooth-designs-v1';
+  const DESIGN_KEYS = SAVED_KEYS.filter(k => !['vplain', 'camProps', 'tone'].includes(k)).concat('camProps');
+  function designOf() { const d = {}; DESIGN_KEYS.forEach(k => { d[k] = JSON.parse(JSON.stringify(state[k])); }); return d; }
+  function applyDesign(d) {
+    DESIGN_KEYS.forEach(k => { if (d[k] !== undefined) state[k] = JSON.parse(JSON.stringify(d[k])); });
+    if (!THEMES[state.theme] || state.theme === 'photo') state.theme = 'confetti';
+    syncUI(); syncAdj(); markFilters(); buildSlots(); buildSwapChips(); buildPaintChips(); schedule();
+  }
+  function loadDesigns() { try { return JSON.parse(localStorage.getItem(DESIGNS_KEY) || '[]'); } catch (e) { return []; } }
+  function storeDesigns(list) { try { localStorage.setItem(DESIGNS_KEY, JSON.stringify(list)); return true; } catch (e) { toast('Not enough space to save designs'); return false; } }
+  function buildDesigns() {
+    const el = $('designs'), list = loadDesigns(); el.innerHTML = '';
+    list.forEach((d, i) => {
+      const wrap = document.createElement('span'); wrap.className = 'design-chip';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = '⭐ ' + d.name;
+      b.addEventListener('click', () => { applyDesign(d.d); toast(`“${d.name}” applied`); });
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '✕';
+      x.setAttribute('aria-label', 'Delete ' + d.name);
+      x.addEventListener('click', () => { if (!confirm(`Delete the design “${d.name}”?`)) return; list.splice(i, 1); storeDesigns(list); buildDesigns(); });
+      wrap.append(b, x); el.appendChild(wrap);
+    });
+  }
+  // ---- design links: the design (no photos) packed into the address after "#d=" ----
+  const b64u = (bytes) => { let s = ''; bytes.forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  async function pipe(bytes, Stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new Stream('deflate-raw'))).arrayBuffer()); }
+  async function designLink() {
+    const d = designOf(), k = state.layout + state.count;
+    d.stickerSets = { [k]: JSON.parse(JSON.stringify(curStickers())) };   // just this layout's stickers
+    d.stickerSets[k].forEach(st => { delete st._hidden; });
+    const json = new TextEncoder().encode(JSON.stringify(d));
+    const packed = window.CompressionStream ? 'z' + b64u(await pipe(json, CompressionStream)) : 'j' + b64u(json);
+    return location.href.split('#')[0] + '#d=' + packed;
+  }
+  async function readDesignLink() {
+    const m = /[#&]d=([zj])([\w-]+)/.exec(location.hash);
+    if (!m) return;
+    history.replaceState(null, '', location.href.split('#')[0]);
+    try {
+      const bytes = unb64u(m[2]);
+      const d = JSON.parse(new TextDecoder().decode(m[1] === 'z' ? await pipe(bytes, DecompressionStream) : bytes));
+      if (!confirm(`Use the design that was shared with you?${d.line1 ? `\n“${d.line1}”` : ''}\n(Your photos stay; save your current design first if you want to keep it.)`)) return;
+      applyDesign(d); toast('🎨 Shared design applied');
+    } catch (e) { toast("That design link didn't work"); }
+  }
+  $('designShare').addEventListener('click', async () => {
+    const url = await designLink();
+    if (navigator.share) { try { await navigator.share({ title: 'My photo booth design', url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(url); toast('🔗 Link copied — send it to a friend'); }
+    catch (e) { prompt('Copy this link:', url); }
+  });
+  window.addEventListener('hashchange', readDesignLink);
+
+  $('designSave').addEventListener('click', () => {
+    const name = askText('Name this design:', state.line1 || 'My design', 30);
+    if (!name) return;
+    const list = loadDesigns().filter(d => d.name !== name);
+    list.unshift({ name, at: Date.now(), d: designOf() });
+    if (storeDesigns(list.slice(0, 20))) { buildDesigns(); toast('⭐ Design saved'); }
+  });
 
   const slotsEl = $('slots');
   function buildSlots() {
@@ -1283,7 +1552,7 @@
   }
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
   const isAndroid = /Android/i.test(navigator.userAgent);
-  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor'];
+  const OVERLAYS = ['photoMenu', 'saveSheet', 'videoSheet', 'stickerEd', 'camera', 'making', 'editor', 'party', 'gallery'];
   function syncScroll() { document.body.style.overflow = OVERLAYS.some(id => !$(id).hidden) ? 'hidden' : ''; }
   function stamp() {
     const d = new Date(), pad = (n) => String(n).padStart(2, '0');
@@ -1291,6 +1560,7 @@
   }
   let sheetFile = null, sheetUrl = null;
   function showSaveSheet(blob, name, title, hint, modes) {
+    $('printBtn').hidden = !/^image\/(jpeg|png)$/.test(blob.type) || /gif|anim/i.test(name);
     $('saveModes').hidden = !modes; if (!modes) $('savePicks').hidden = true;
     $('shareBtn').textContent = '📤 Share';
     if (sheetUrl) URL.revokeObjectURL(sheetUrl);
@@ -1332,6 +1602,25 @@
     return cv;
   }
   const toJpeg = (cv) => new Promise(res => cv.toBlob(res, 'image/jpeg', 0.92));
+  // A 4×6 photo print at 300 dpi. A strip is printed twice side by side (cut down the middle), like a
+  // real photo booth; other layouts are centred on the sheet in whichever way round fits best.
+  function composePrint(src) {
+    const strip = state.layout === 'strip', land = !strip && src.width > src.height;
+    const W = land ? 1800 : 1200, H = land ? 1200 : 1800;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    const fit = (x, y, w, h) => {
+      const k = Math.min(w / src.width, h / src.height), dw = src.width * k, dh = src.height * k;
+      ctx.drawImage(src, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+    };
+    if (strip) {
+      fit(24, 24, W / 2 - 48, H - 48); fit(W / 2 + 24, 24, W / 2 - 48, H - 48);
+      ctx.strokeStyle = '#ccc'; ctx.setLineDash([12, 12]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+    } else fit(36, 36, W - 72, H - 72);
+    return cv;
+  }
   const save = { mode: 'booth', pick: 0, strip: null, photos: [] };
   async function buildSaveSheet() {
     const name = `photobooth-${save.stamp}`;
@@ -1339,6 +1628,11 @@
       if (!save.strip) { render(); save.strip = await toJpeg(canvas); }
       if (!save.strip) { toast('Could not create the image'); return; }
       showSaveSheet(save.strip, `${name}.jpg`, 'Your picture is ready 🎉', photoHint(), true);
+    } else if (save.mode === 'print') {
+      if (!save.print) { render(); save.print = await toJpeg(composePrint(canvas)); }
+      showSaveSheet(save.print, `${name}-4x6.jpg`, 'Ready to print 🖨️',
+        (state.layout === 'strip' ? 'Two strips on one 4×6 photo — cut down the middle. ' : '') +
+        'Print at 4×6 in (10×15 cm), "fit to page" off, on a printer or at a photo kiosk.', true);
     } else {
       const idx = filledIdx();
       if (!save.photos.length) save.photos = await Promise.all(idx.map(async i => new File([await toJpeg(composePhotoOnly(i))], `${name}-photo${i + 1}.jpg`, { type: 'image/jpeg' })));
@@ -1358,13 +1652,14 @@
       b.appendChild(im); b.addEventListener('click', () => { save.pick = k; buildSaveSheet(); });
       picks.appendChild(b);
     });
-    chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Booth design' }, { id: 'photos', label: '📷 Just the photos' }],
+    chipGroup($('saveModes'), [{ id: 'booth', label: '🎉 Design' }, { id: 'photos', label: '📷 Photos' }, { id: 'print', label: '🖨️ 4×6 print' }],
       m => save.mode === m.id, m => { save.mode = m.id; buildSaveSheet(); });
   }
   $('save').addEventListener('click', () => {
-    Object.assign(save, { strip: null, photos: [], pick: 0, stamp: stamp() });
+    Object.assign(save, { strip: null, print: null, photos: [], pick: 0, stamp: stamp() });
     buildSaveSheet();
   });
+  $('printBtn').addEventListener('click', () => printImage(sheetFile));
   $('dlBtn').addEventListener('click', () => { if (!isIOS && sheetFile) setTimeout(() => toast('Saved ' + sheetFile.name), 300); });
   $('shareBtn').addEventListener('click', async () => {
     if (!sheetFile) return;
@@ -1606,11 +1901,55 @@
   function stickerBox(st) {
     if (st.kind === 'emoji') return { w: 1, h: 1 };
     if (st.kind === 'svg') { const im = svgImage(st.id); return { w: 1, h: im ? im.naturalHeight / im.naturalWidth : 1 }; }
-    if (st.kind === 'text') {
-      measureCtx.font = textFont(st, 100);
-      return { w: Math.max(.2, measureCtx.measureText(st.text || ' ').width / 100 * TEXT_SIZE), h: TEXT_SIZE * 1.3 };
-    }
+    if (st.kind === 'text') { const L = textLayout(st); return { w: L.w, h: L.h }; }
     return { w: 1, h: PBProps.height(st.id) };
+  }
+  // Text stickers: several lines, optionally bent into an arc (st.curve -1…1: frown…rainbow).
+  // Everything is in units at font size TEXT_SIZE; cached because it's measured on every draw.
+  const textCache = new Map();
+  function textLayout(st) {
+    const key = [st.text, st.font, st.curve || 0].join('|');
+    let L = textCache.get(key);
+    if (L) return L;
+    measureCtx.font = textFont(st, 100);
+    const fs = TEXT_SIZE, lh = fs * 1.2, curve = st.curve || 0;
+    const lines = String(st.text || ' ').split('\n').map(t => {
+      const chars = [...t].map(ch => ({ ch, w: measureCtx.measureText(ch).width / 100 * fs }));
+      return { t, chars, w: Math.max(fs * .3, measureCtx.measureText(t).width / 100 * fs) };
+    });
+    const maxW = Math.max(...lines.map(l => l.w));
+    let w = maxW, h = lines.length * lh, bend = 0;
+    if (curve) {
+      // an arc spanning up to 180°; its depth is added to the height
+      const th = Math.abs(curve) * Math.PI, R = maxW / th;
+      bend = R * (1 - Math.cos(th / 2));
+      w = Math.max(maxW * .4, 2 * R * Math.sin(Math.min(th, Math.PI) / 2)) + fs * .3;
+      h += bend;
+    }
+    L = { lines, w: Math.max(.2, w), h, lh, fs, curve, bend, maxW };
+    textCache.set(key, L); if (textCache.size > 200) textCache.delete(textCache.keys().next().value);
+    return L;
+  }
+  function paintText(c, st, u) {
+    const L = textLayout(st), px = u * L.fs;
+    c.font = textFont(st, px); c.fillStyle = st.color || '#ff2d87'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const top = -L.h / 2 + (L.curve < 0 ? L.bend : 0);
+    L.lines.forEach((line, i) => {
+      const y = (top + L.lh * (i + .5)) * u + px * .06;
+      if (!L.curve) { c.fillText(line.t, 0, y); return; }
+      // place each letter along a circle: centre below the line for a rainbow, above for a frown
+      const th = Math.abs(L.curve) * Math.PI * (line.w / L.maxW), R = line.w / th * u, dir = L.curve > 0 ? 1 : -1;
+      let x = -line.w * u / 2;
+      line.chars.forEach(({ ch, w }) => {
+        const mid = x + w * u / 2, a = mid / R;
+        c.save();
+        c.translate(Math.sin(a) * R, y + dir * (R - Math.cos(a) * R));
+        c.rotate(dir * a);
+        c.fillText(ch, 0, 0);
+        c.restore();
+        x += w * u;
+      });
+    });
   }
   function stickerFit(st) {
     if (st.kind === 'svg') { const d = (self.PBStickers || []).find(x => x.id === st.id); return d && d.face || null; }
@@ -1627,8 +1966,7 @@
       const im = svgImage(st.id);
       if (im) { const h = u * im.naturalHeight / im.naturalWidth; c.drawImage(im, -u / 2, -h / 2, u, h); }
     } else if (st.kind === 'text') {
-      c.font = textFont(st, u * TEXT_SIZE); c.fillStyle = st.color || '#ff2d87';
-      c.fillText(st.text || '', 0, u * TEXT_SIZE * 0.06);
+      paintText(c, st, u);
     } else PBProps.draw(c, st.id, u, st.text);
   }
   // Stickers are rendered once into a small bitmap (with their outline) and reused; sizes are
@@ -1637,7 +1975,7 @@
   function stickerBitmap(st, px) {
     const q = Math.max(8, Math.round(Math.pow(1.08, Math.round(Math.log(Math.max(8, px)) / Math.log(1.08)))));
     const border = borderOf(st);
-    const key = [st.kind, st.id, st.text, st.color, st.font, border, q].join('|');
+    const key = [st.kind, st.id, st.text, st.color, st.font, st.curve, border, q].join('|');
     let bm = bmCache.get(key);
     if (bm) { bmCache.delete(key); bmCache.set(key, bm); return bm; }
     if (st.kind === 'svg' && !svgImage(st.id)) return null;
@@ -1661,11 +1999,28 @@
     if (bmCache.size > 150) bmCache.delete(bmCache.keys().next().value);
     return bm;
   }
-  function drawSticker(ctx, st, W, H) {
+  // Sticker motion for videos (and the video sticker studio): time in seconds, or null for stills.
+  const ANIMS = [
+    { id: '', label: 'Still' }, { id: 'wiggle', label: '〰️ Wiggle' }, { id: 'pulse', label: '💓 Pulse' }, { id: 'bounce', label: '⛹️ Bounce' },
+    { id: 'spin', label: '🌀 Spin' }, { id: 'float', label: '🎈 Float' }, { id: 'flash', label: '✨ Flash' }
+  ];
+  function animate(ctx, st, unit, t) {
+    const ph = (st.x * 7 + st.y * 13) % 6.28;               // stickers don't all move in step
+    switch (st.anim) {
+      case 'wiggle': ctx.rotate(Math.sin(t * 9 + ph) * .18); break;
+      case 'pulse': { const k = 1 + .12 * Math.sin(t * 7 + ph); ctx.scale(k, k); break; }
+      case 'bounce': ctx.translate(0, -Math.abs(Math.sin(t * 5 + ph)) * unit * .25); break;
+      case 'spin': ctx.rotate(t * 3.5 + ph); break;
+      case 'float': ctx.translate(Math.sin(t * 1.6 + ph) * unit * .08, Math.sin(t * 2.3 + ph) * unit * .12); break;
+      case 'flash': ctx.globalAlpha *= .35 + .65 * (Math.sin(t * 8 + ph) > 0 ? 1 : 0); break;
+    }
+  }
+  function drawSticker(ctx, st, W, H, t) {
     const unit = st.s * Math.min(W, H);
     ctx.save();
     ctx.translate(st.x * W, st.y * H);
     ctx.rotate(st.r || 0);
+    if (st.anim && t != null) animate(ctx, st, unit, t);
     if (st.flip) ctx.scale(-1, 1);
     if (st.kind === 'prop' && !borderOf(st)) PBProps.draw(ctx, st.id, unit, st.text);   // crisp vectors
     else {
@@ -1680,13 +2035,17 @@
   }
   // Attached stickers (st.face) are re-placed on their face before drawing; `track` switches from
   // "same face in the same photo" (strips) to following the nearest face frame by frame (videos).
-  function drawStickers(ctx, list, W, H, faces, track) {
+  function drawStickers(ctx, list, W, H, faces, track, t) {
     (list || []).forEach(st => {
+      let f = null;
       if (st.face && faces) {
-        const f = track ? trackFace(st, faces, track, W, H) : faceFor(st, faces, W, H);
+        f = track ? trackFace(st, faces, track, W, H)
+          : st.face.cam ? faces.find(g => g.slot === st.face.slot && g.idx === st.face.idx) : faceFor(st, faces, W, H);
         if (f) fitToFace(st, f, W, H);
       }
-      drawSticker(ctx, st, W, H);
+      // props picked in the camera only show up on an actual face
+      st._hidden = !!(st.face && st.face.cam && !f);
+      if (!st._hidden) drawSticker(ctx, st, W, H, t);
     });
   }
 
@@ -1794,7 +2153,11 @@
   function trackFace(st, faces, track, W, H) {
     const prev = track.get(st);
     const ref = prev ? { x: prev.pts.eyes.x, y: prev.pts.eyes.y, d: prev.d } : st.face.home;
-    if (!ref) return null;
+    if (!ref) {                                                // camera props: start on the n-th face from the left
+      const f = faces[st.face.idx || 0];
+      if (f) track.set(st, f);
+      return f || null;
+    }
     let best = null, bd = prev ? 2.5 : 8;
     faces.forEach(f => {
       const dd = Math.hypot((f.pts.eyes.x - ref.x) * W, (f.pts.eyes.y - ref.y) * H) / (ref.d * Math.min(W, H));
@@ -1818,6 +2181,7 @@
   function hitSticker(list, px, py, W, H) {
     for (let i = list.length - 1; i >= 0; i--) {
       const st = list[i], dx = px - st.x * W, dy = py - st.y * H;
+      if (st._hidden) continue;
       const c = Math.cos(-(st.r || 0)), sn = Math.sin(-(st.r || 0));
       const lx = dx * c - dy * sn, ly = dx * sn + dy * c;
       const { hw, hh } = stickerHalf(st, W, H);
@@ -1832,8 +2196,10 @@
   function openStickers(opts) {
     stEd.list = opts.list; stEd.base = opts.getBase(); stEd.onDone = opts.onDone; stEd.sel = -1;
     if (opts.tab) stEd.tab = opts.tab;
+    stEd.video = !!opts.video;
     stEd.before = JSON.stringify(stEd.list);
     stEd.getFaces = opts.getFaces || null; stEd.faces = stEd.getFaces ? stEd.getFaces() : null;
+    stEd.hist = [JSON.stringify(stEd.list)]; stEd.hi = 0; syncUndo();
     $('stickerEd').hidden = false; syncScroll();
     buildStickerTray();
     requestAnimationFrame(drawStEd);
@@ -1853,7 +2219,49 @@
     const w = B.width * sc, h = B.height * sc;
     return { dpr, cw, ch, x: (cw - w) / 2, y: (ch - h) / 2, w, h };
   }
-  function drawStEd() {
+  // ---- undo / redo: a snapshot is taken shortly after each change settles (not on every drag frame) ----
+  let histTimer = 0;
+  function noteChange() {
+    clearTimeout(histTimer);
+    histTimer = setTimeout(() => {
+      if (!stEd.hist || stEd.pts.size) { if (stEd.pts.size) noteChange(); return; }
+      const snap = JSON.stringify(stEd.list);
+      if (snap === stEd.hist[stEd.hi]) return;
+      stEd.hist.splice(stEd.hi + 1); stEd.hist.push(snap);
+      if (stEd.hist.length > 80) stEd.hist.shift();
+      stEd.hi = stEd.hist.length - 1; syncUndo();
+    }, 350);
+  }
+  function syncUndo() {
+    $('stUndo').disabled = !stEd.hist || stEd.hi <= 0;
+    $('stRedo').disabled = !stEd.hist || stEd.hi >= stEd.hist.length - 1;
+  }
+  function stepHist(d) {
+    clearTimeout(histTimer);
+    const i = stEd.hi + d;
+    if (!stEd.hist || i < 0 || i >= stEd.hist.length) return;
+    stEd.hi = i;
+    stEd.list.splice(0, stEd.list.length, ...JSON.parse(stEd.hist[i]));
+    stEd.sel = -1; syncUndo(); drawStEd(true);
+  }
+  $('stUndo').addEventListener('click', () => stepHist(-1));
+  $('stRedo').addEventListener('click', () => stepHist(1));
+  document.addEventListener('keydown', (e) => {
+    if ($('stickerEd').hidden || /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    if (mod && k === 'z') { e.preventDefault(); stepHist(e.shiftKey ? 1 : -1); return; }
+    if (mod && k === 'y') { e.preventDefault(); stepHist(1); return; }
+    const st = stEd.list[stEd.sel];
+    if (!st) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); $('stDelete').click(); return; }
+    const step = e.shiftKey ? .02 : .005, mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (mv) { e.preventDefault(); st.x = clamp(st.x + mv[0], 0, 1); st.y = clamp(st.y + mv[1], 0, 1); refitSel(st, false); drawStEd(); }
+    if (e.key === 'Escape') { stEd.sel = -1; drawStEd(); }
+  });
+
+  function drawStEd(fromHistory) {
+    if (fromHistory !== true) noteChange();
+    stc.dataset.count = stEd.list.length;
     if ($('stickerEd').hidden) return;
     const V = stView(); stEd.view = V;
     const ctx = stc.getContext('2d');
@@ -1863,7 +2271,9 @@
     ctx.save();
     ctx.translate(V.x, V.y);
     ctx.beginPath(); ctx.rect(0, 0, V.w, V.h); ctx.clip();
-    drawStickers(ctx, stEd.list, V.w, V.h, stEd.faces);
+    const moving = stEd.video && stEd.list.some(s => s.anim);
+    drawStickers(ctx, stEd.list, V.w, V.h, stEd.faces, null, moving ? performance.now() / 1000 : null);
+    if (moving && !stEd.animRaf) stEd.animRaf = requestAnimationFrame(() => { stEd.animRaf = 0; drawStEd(true); });
     const st = stEd.list[stEd.sel];
     if (st) {
       const f = st.face && stEd.faces && faceFor(st, stEd.faces, V.w, V.h);
@@ -2067,12 +2477,23 @@
   let emojiCat = 0, emojiQuery = '';
   function emojiList() {
     const D = window.PBEmojiData || [];
-    const split = (g) => g.list.split('\t').map(x => { const i = x.indexOf(' '); return { e: x.slice(0, i), n: x.slice(i + 1) }; });
+    const split = (g) => g.list.split('\t').map(x => {
+      const tone = x[0] === '~', y = tone ? x.slice(1) : x, i = y.indexOf(' ');
+      return { e: tone ? withTone(y.slice(0, i)) : y.slice(0, i), n: y.slice(i + 1) };
+    });
     if (emojiQuery) {
       const q = emojiQuery.toLowerCase();
       return D.flatMap(split).filter(x => x.n.includes(q)).slice(0, 300);
     }
     return D[emojiCat] ? split(D[emojiCat]) : PBProps.EMOJI.map(e => ({ e, n: '' }));
+  }
+  // skin tone: the modifier goes right after the first character (replacing an emoji-style selector)
+  const TONES = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'];
+  function withTone(e) {
+    if (!state.tone) return e;
+    const cps = [...e];
+    const rest = cps.slice(1); if (rest[0] === '\uFE0F') rest.shift();
+    return cps[0] + state.tone + rest.join('');
   }
   function buildStickerTray() {
     chipGroup($('stTabs'), STICKER_TABS, t => stEd.tab === t.id, t => { stEd.tab = t.id; buildStickerTray(); });
@@ -2091,13 +2512,16 @@
     } else if (stEd.tab === 'fun') {
       (self.PBStickers || []).forEach(d => add(svgIcon(d.id), () => addSticker({ kind: 'svg', id: d.id, s: d.face ? .36 : .3 }), '', d.name));
     } else if (stEd.tab === 'words') {
-      add('🔤 Add your own text', () => { const t = askText('Your text:', ''); if (t) addSticker({ kind: 'text', text: t, color: '#ff2d87', font: 'playful', s: .3 }); }, 'txt wide');
+      add('🔤 Add your own text', () => openTextSheet(null), 'txt wide');
       add('✏️ Your own bubble', () => { const t = askText('Words for the speech bubble:', 'Hooray!', 24); if (t) addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 }); }, 'txt');
       add('💥 Your own burst', () => { const t = askText('Words for the comic burst:', 'WHOA!', 16); if (t) addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 }); }, 'txt');
       PBProps.WORDS.bubble.forEach(t => add(propIcon('bubble', t), () => addSticker({ kind: 'prop', id: 'bubble', text: t, s: .36 })));
       PBProps.WORDS.burst.forEach(t => add(propIcon('burst', t), () => addSticker({ kind: 'prop', id: 'burst', text: t, s: .34 })));
     } else {
       const D = window.PBEmojiData || [];
+      chipGroup($('stTones'), TONES.map(t => ({ t, label: '✋' + t })), o => (state.tone || '') === o.t,
+        o => { state.tone = o.t; saveSettings(); buildStickerTray(); });
+      [...$('stTones').children].forEach((b, i) => b.setAttribute('aria-label', ['Default skin tone', 'Light', 'Medium-light', 'Medium', 'Medium-dark', 'Dark'][i]));
       chipGroup($('stCatChips'), D.map((g, i) => ({ i, label: g.icon, title: g.name })), g => !emojiQuery && emojiCat === g.i,
         g => { emojiCat = g.i; emojiQuery = ''; $('stSearch').value = ''; buildStickerTray(); });
       [...$('stCatChips').children].forEach((b, i) => { if (D[i]) { b.title = D[i].name; b.setAttribute('aria-label', D[i].name); } });
@@ -2136,11 +2560,13 @@
   function syncStyle(st) {
     $('stAttach').setAttribute('aria-pressed', st.face ? 'true' : 'false');
     $('stEdit').hidden = !hasText(st);
-    const sig = [stEd.sel, st.kind, st.border, st.color, st.font].join('|');
+    const sig = [stEd.sel, st.kind, st.border, st.color, st.font, st.anim].join('|');
     if (styleFor === sig) return;
     styleFor = sig;
     const pick = (fn) => (v) => { const cur = stEd.list[stEd.sel]; if (cur) { fn(cur, v); drawStEd(); } };
     swatches($('stBorders'), BORDER_SWATCHES, borderOf(st), pick((o, v) => { o.border = v; }), 'stBorderCustom');
+    $('stAnimRow').hidden = !stEd.video;
+    if (stEd.video) chipGroup($('stAnims'), ANIMS, a => (st.anim || '') === a.id, pick((o, a) => { o.anim = a.id; }));
     const isText = st.kind === 'text';
     $('stTextRow').hidden = !isText;
     if (isText) {
@@ -2151,9 +2577,37 @@
   }
   function editText() {
     const st = stEd.list[stEd.sel]; if (!st || !hasText(st)) return;
-    const t = askText('Change the words:', st.text || '', st.kind === 'text' ? 60 : st.id === 'burst' ? 16 : 24);
+    if (st.kind === 'text') { openTextSheet(st); return; }
+    const t = askText('Change the words:', st.text || '', st.id === 'burst' ? 16 : 24);
     if (t) { st.text = t; drawStEd(); }
   }
+  // the text box: several lines and a curve slider, with a live preview on the picture
+  let textTarget = null;
+  function openTextSheet(st) {
+    textTarget = st;
+    $('txtInput').value = st ? st.text : '';
+    $('txtCurve').value = st ? (st.curve || 0) : 0;
+    $('txtTitle').textContent = st ? 'Change your text' : 'Add your text';
+    $('textSheet').hidden = false;
+    setTimeout(() => $('txtInput').focus(), 50);
+  }
+  function textSheetLive() {
+    if (!textTarget) return;
+    textTarget.text = $('txtInput').value.slice(0, 120) || ' ';
+    textTarget.curve = +$('txtCurve').value;
+    drawStEd();
+  }
+  $('txtInput').addEventListener('input', textSheetLive);
+  $('txtCurve').addEventListener('input', textSheetLive);
+  $('txtOk').addEventListener('click', () => {
+    const t = $('txtInput').value.replace(/\s+$/, '').slice(0, 120);
+    $('textSheet').hidden = true;
+    if (!t.trim()) { if (textTarget) { stEd.list.splice(stEd.list.indexOf(textTarget), 1); stEd.sel = -1; drawStEd(); } textTarget = null; return; }
+    if (textTarget) { textTarget.text = t; textTarget.curve = +$('txtCurve').value; drawStEd(); }
+    else addSticker({ kind: 'text', text: t, curve: +$('txtCurve').value, color: '#ff2d87', font: 'playful', s: .3 });
+    textTarget = null;
+  });
+  $('txtCancel').addEventListener('click', () => { $('textSheet').hidden = true; textTarget = null; }); 
   $('stEdit').addEventListener('click', editText);
   stc.addEventListener('dblclick', (e) => {
     const pt = stLocal(e), i = hitSticker(stEd.list, pt.x, pt.y, stEd.view.w, stEd.view.h);
@@ -2255,7 +2709,7 @@
   }
   function applyPreview() {
     camVideo.style.transform = cam.facing === 'user' ? 'scaleX(-1)' : 'none';
-    camVideo.style.filter = PBFilters.css(camFilter()) || 'none';
+    camVideo.style.filter = [PBFilters.css(camFilter()), PBFilters.adjCss(state.adj)].join(' ').trim() || 'none';
   }
 
   async function openCamera(opts = {}) {
@@ -2265,7 +2719,9 @@
     if (cam.slot >= 0 && camMode().kind !== 'photo') cam.mode = 'booth';
     $('camera').hidden = false; $('camReview').hidden = true; $('camError').hidden = true;
     syncScroll();
-    buildCamUI();
+    buildCamUI(); $('camProps').hidden = true; buildCamProps();
+    if (state.camProps.length) PBFace.load();
+    liveStart();
     await startStream();
   }
   async function startStream() {
@@ -2293,17 +2749,22 @@
     cam.stream = null; camVideo.srcObject = null;
   }
   function closeCamera() {
-    cam.cancel = true; stopStream();
+    cam.cancel = true; cam.party = false; stopStream(); liveStop();
     $('camera').hidden = true; $('camCount').hidden = true; $('camRec').hidden = true;
     syncScroll();
   }
   function camError(msg) { $('camErrorMsg').textContent = msg; $('camError').hidden = false; }
 
+  // one shared audio context, first created on a tap (phones only allow sound after one)
+  function audioCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) throw new Error('no audio');
+    cam.audio = cam.audio || new AC();
+    if (cam.audio.state === 'suspended') cam.audio.resume();
+    return cam.audio;
+  }
   function beep(freq, dur, vol) {
     try {
-      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      cam.audio = cam.audio || new AC();
-      const a = cam.audio; if (a.state === 'suspended') a.resume();
+      const a = audioCtx();
       const o = a.createOscillator(), g = a.createGain();
       o.frequency.value = freq;
       g.gain.setValueAtTime(vol || .12, a.currentTime);
@@ -2376,6 +2837,7 @@
     }
   }
   function showReview() {
+    if (party.on) { usePhotos().then(partyResult); return; }   // party mode: no review, straight to the strip
     const n = shotsNeeded(), g = $('reviewGrid'); g.innerHTML = '';
     g.style.gridTemplateColumns = n === 1 ? 'minmax(0, 240px)' : n === 4 ? '1fr 1fr' : 'repeat(3, 1fr)';
     g.style.justifyContent = 'center';
@@ -2397,22 +2859,27 @@
     const old = state.photos[i]; if (old) URL.revokeObjectURL(old.url);
     state.photos[i] = { canvas: c, url: URL.createObjectURL(blob), zoom: 1, cx: null, cy: null, filter: null };
   }
-  $('revUse').addEventListener('click', async () => {
+  $('revUse').addEventListener('click', () => usePhotos());
+  async function usePhotos() {
     const n = shotsNeeded(), special = cam.mode === 'glam' || cam.mode === 'comic' ? camFilter() : null;
+    const slots = [];
     for (let k = 0; k < n; k++) {
       const slot = cam.slot >= 0 ? cam.slot : k;
       await setPhotoCanvas(slot, cam.shots[k].canvas);
       if (special && cam.slot >= 0) state.photos[slot].filter = special;
+      slots.push(slot);
     }
+    await applyCamProps(slots);
     if (special && cam.slot < 0) {
       state.filter = special;
       if (cam.mode === 'comic') applyComicLook();
     }
     const wasComic = cam.mode === 'comic' && cam.slot < 0;
     closeCamera(); markFilters(); buildSlots(); schedule();
+    if (party.on) return;
     toast(wasComic ? '💥 Comic page ready!' : n > 1 ? 'Photos added!' : 'Photo replaced');
     setTimeout(() => $('previewSection').scrollIntoView({ behavior: 'smooth', block: 'start' }), 250);
-  });
+  }
   function applyComicLook() {
     Object.assign(state, {
       theme: 'action', layout: 'grid', style: 'straight', shape: 'rect', frame: 'black', frameSize: 1.4, font: 'bold',
@@ -2457,10 +2924,265 @@
   $('camExtra').addEventListener('click', () => { cam.glamBW = !cam.glamBW; buildCamUI(); applyPreview(); });
   $('openCam').addEventListener('click', () => openCamera());
 
+  // ================= party mode =================
+  // A kiosk for guests: full screen, one big button, 4-shot countdown (with the host's design, stickers
+  // and camera props), then the strip to share or print. Strips are kept in a gallery on this device.
+  // (Sending a strip to a guest's own phone by QR needs a server — see ROADMAP.md.)
+  const party = { on: false, lock: null, idle: 0, left: 0 };
+  async function enterParty() {
+    party.on = true;
+    $('partyTitle').textContent = state.line1 || 'Photo Booth';
+    $('party').hidden = false; syncScroll();
+    partyAttract();
+    try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch (e) { /* not allowed here */ }
+    try { party.lock = await navigator.wakeLock.request('screen'); } catch (e) { /* keeps the screen on where supported */ }
+    drawQR($('partyQR'), location.href.split('#')[0]);
+  }
+  function exitParty() {
+    party.on = false; clearInterval(party.idle);
+    $('camera').classList.remove('party');
+    $('party').hidden = true; syncScroll();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (party.lock) { party.lock.release().catch(() => {}); party.lock = null; }
+  }
+  async function partyAttract() {
+    clearInterval(party.idle);
+    $('partyAttract').hidden = false; $('partyResult').hidden = true;
+    const n = await stripCount();
+    $('partyNote').textContent = n ? `${n} strip${n === 1 ? '' : 's'} taken so far 🎉` : '';
+  }
+  function partyShoot() {
+    // guests' photos never mix with the next group's
+    state.photos = [null, null, null, null];
+    cam.party = true; cam.timer = cam.timer || 3;
+    $('camera').classList.add('party');
+    openCamera({ mode: 'booth' }).then(() => { if (party.on && cam.stream) $('camShutter').click(); });
+  }
+  let partyBlob = null;
+  async function partyResult() {
+    render();
+    partyBlob = await toJpeg(canvas);
+    $('partyImg').src = URL.createObjectURL(partyBlob);
+    $('partyAttract').hidden = true; $('partyResult').hidden = false;
+    $('partyShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([partyBlob], 'strip.jpg', { type: 'image/jpeg' })] }));
+    photoTx('readwrite', s => s.add({ blob: partyBlob, at: Date.now() }), 'strips').catch(() => {});
+    // back to the start screen by itself if nobody touches it
+    party.left = 45;
+    clearInterval(party.idle);
+    party.idle = setInterval(() => {
+      party.left--;
+      $('partyTimer').textContent = `Next group in ${party.left}s`;
+      if (party.left <= 0) partyDone();
+    }, 1000);
+  }
+  function partyDone() {
+    clearInterval(party.idle);
+    if ($('partyImg').src) URL.revokeObjectURL($('partyImg').src);
+    state.photos.forEach(p => p && URL.revokeObjectURL(p.url));
+    state.photos = [null, null, null, null]; buildSlots(); schedule();
+    partyAttract();
+  }
+  $('partyResult').addEventListener('pointerdown', () => { party.left = 45; });
+  $('partyStart').addEventListener('click', enterParty);
+  $('partyGo').addEventListener('click', partyShoot);
+  $('partyDone').addEventListener('click', partyDone);
+  $('partyShare').addEventListener('click', async () => {
+    try { await navigator.share({ files: [new File([partyBlob], `photobooth-${stamp()}.jpg`, { type: 'image/jpeg' })] }); } catch (e) { /* cancelled */ }
+  });
+  $('partyPrint').addEventListener('click', () => printImage(partyBlob));
+  // hold ✕ for 1.5 s to leave, so guests don't exit by accident
+  (() => {
+    const b = $('partyExit'); let t0 = 0, raf = 0;
+    const stop = () => { cancelAnimationFrame(raf); b.classList.remove('holding'); b.style.removeProperty('--p'); };
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - t0) / 1500);
+      b.style.setProperty('--p', Math.round(p * 100) + '%');
+      if (p >= 1) { stop(); exitParty(); return; }
+      raf = requestAnimationFrame(tick);
+    };
+    b.addEventListener('pointerdown', () => { t0 = performance.now(); b.classList.add('holding'); raf = requestAnimationFrame(tick); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop));
+    b.addEventListener('click', () => { if (!b.classList.contains('holding')) toast('Hold ✕ to leave party mode'); });
+  })();
+  function printImage(blob) {
+    if (!blob) return;
+    let area = $('printArea');
+    if (!area) { area = document.createElement('div'); area.id = 'printArea'; document.body.appendChild(area); }
+    area.innerHTML = '';
+    const img = document.createElement('img'); img.src = URL.createObjectURL(blob);
+    img.onload = () => { window.print(); setTimeout(() => URL.revokeObjectURL(img.src), 1000); };
+    area.appendChild(img);
+  }
+  function drawQR(cv, text) {
+    if (!window.qrcode) return;
+    const q = qrcode(0, 'M'); q.addData(text); q.make();
+    const n = q.getModuleCount(), ctx = cv.getContext('2d'), k = Math.floor(cv.width / (n + 2)), o = Math.floor((cv.width - k * n) / 2);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#1b1b1b';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(o + c * k, o + r * k, k, k);
+  }
+
+  // ---- party gallery ----
+  function stripCount() { return photoTx('readonly', s => s.count(), 'strips').catch(() => 0); }
+  function allStrips() {
+    return photoTx('readonly', s => s.getAll(), 'strips').catch(() => []);
+  }
+  async function openGallery() {
+    const list = await allStrips(), g = $('galleryGrid');
+    [...g.querySelectorAll('img')].forEach(im => URL.revokeObjectURL(im.src));
+    g.innerHTML = '';
+    $('galleryHint').textContent = list.length
+      ? `${list.length} strip${list.length === 1 ? '' : 's'} saved on this device. Tap one to save or share it.`
+      : 'Strips from party mode show up here.';
+    list.slice().reverse().forEach(rec => {
+      const b = document.createElement('button'); b.type = 'button';
+      const im = document.createElement('img'); im.src = URL.createObjectURL(rec.blob); im.alt = '';
+      b.appendChild(im);
+      b.addEventListener('click', () => showSaveSheet(rec.blob, `photobooth-${new Date(rec.at).toISOString().slice(0, 19).replace(/[-:T]/g, '')}.jpg`, 'Party strip', photoHint()));
+      g.appendChild(b);
+    });
+    $('galleryShare').hidden = !list.length || !(navigator.canShare && navigator.canShare({ files: [new File([list[0].blob], 'a.jpg', { type: 'image/jpeg' })] }));
+    $('galleryClear').hidden = !list.length;
+    $('gallery').hidden = false; syncScroll();
+  }
+  $('galleryOpen').addEventListener('click', openGallery);
+  $('galleryClose').addEventListener('click', () => { $('gallery').hidden = true; syncScroll(); });
+  $('galleryShare').addEventListener('click', async () => {
+    const list = await allStrips();
+    const files = list.map((r, i) => new File([r.blob], `party-strip-${i + 1}.jpg`, { type: 'image/jpeg' }));
+    try { await navigator.share({ files }); } catch (e) { /* cancelled or too many */ }
+  });
+  $('galleryClear').addEventListener('click', async () => {
+    if (!confirm('Delete every strip in the party gallery on this device?')) return;
+    await photoTx('readwrite', s => s.clear(), 'strips').catch(() => {});
+    openGallery();
+  });
+
+  // ================= live face props in the camera =================
+  // Pick props before the shot and see them on everyone's face in the preview. The captured photos /
+  // video get them as stuck-on stickers (st.face.cam), so they can still be moved or removed later.
+  function faceChoices() {
+    const out = [];
+    PBProps.LIST.forEach(p => { if (PBProps.fit('prop', p.id)) out.push({ kind: 'prop', id: p.id, name: p.name }); });
+    (self.PBStickers || []).forEach(d => { if (d.face) out.push({ kind: 'svg', id: d.id, name: d.name }); });
+    ['🕶️', '👑', '🎩', '🎀', '🥸', '🤡'].forEach(e => out.push({ kind: 'emoji', id: e, name: e }));
+    return out;
+  }
+  const hasCamProp = (c) => state.camProps.some(p => p.kind === c.kind && p.id === c.id);
+  function camSticker(cp, slot, idx) {
+    const fit = stickerFit(cp) || { at: 'eyes', s: 2 };
+    return { kind: cp.kind, id: cp.id, x: .5, y: .4, s: .3, r: 0, flip: false, border: '',
+      face: { at: fit.at, x: fit.x || 0, y: fit.y || 0, s: fit.s, r: 0, slot, idx, cam: true } };
+  }
+  function buildCamProps() {
+    const el = $('camProps'); el.innerHTML = '';
+    const add = (content, title, on, click) => {
+      const b = document.createElement('button'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
+      b.setAttribute('aria-pressed', String(on));
+      if (typeof content === 'string') b.textContent = content; else b.appendChild(content);
+      b.addEventListener('click', click); el.appendChild(b);
+    };
+    PBPaint.EFFECTS.forEach(e => add(e.label.split(' ')[0], e.label.replace(/^\S+ /, '') + ' face paint', (state.facePaint || 'none') === e.id && e.id !== 'none',
+      () => { setPaint(state.facePaint === e.id ? 'none' : e.id); buildCamProps(); }));
+    const sep = document.createElement('span'); sep.className = 'sep'; el.appendChild(sep);
+    add('🚫', 'No props', !state.camProps.length, () => { state.camProps = []; saveSettings(); buildCamProps(); });
+    faceChoices().forEach(c => add(c.kind === 'prop' ? propIcon(c.id) : c.kind === 'svg' ? svgIcon(c.id) : c.id, c.name, hasCamProp(c), () => {
+      state.camProps = hasCamProp(c) ? state.camProps.filter(p => !(p.kind === c.kind && p.id === c.id)) : state.camProps.concat({ kind: c.kind, id: c.id });
+      saveSettings(); buildCamProps();
+      if (state.camProps.length) PBFace.load();
+    }));
+    $('camPropsBtn').setAttribute('aria-pressed', String(!el.hidden || state.camProps.length > 0));
+  }
+  $('camPropsBtn').addEventListener('click', () => {
+    $('camProps').hidden = !$('camProps').hidden;
+    buildCamProps();
+    if (!$('camProps').hidden) PBFace.load();
+  });
+
+  const live = { raf: 0, poses: [], count: 0 };
+  const camOverlay = $('camOverlay');
+  function liveStart() { if (!live.raf) live.raf = requestAnimationFrame(liveFrame); }
+  function liveStop() { cancelAnimationFrame(live.raf); live.raf = 0; live.poses = []; camOverlay.getContext('2d').clearRect(0, 0, camOverlay.width, camOverlay.height); }
+  function liveFrame() {
+    live.raf = 0;
+    if ($('camera').hidden) return;
+    live.raf = requestAnimationFrame(liveFrame);
+    const dpr = window.devicePixelRatio || 1, cw = camOverlay.clientWidth, ch = camOverlay.clientHeight;
+    if (camOverlay.width !== Math.round(cw * dpr) || camOverlay.height !== Math.round(ch * dpr)) {
+      camOverlay.width = Math.round(cw * dpr); camOverlay.height = Math.round(ch * dpr);
+    }
+    const ctx = camOverlay.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, camOverlay.width, camOverlay.height);
+    const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
+    const wanted = state.camProps.length || !$('camProps').hidden || paintOn();
+    const hint = (state.camProps.length || paintOn()) && !PBFace.ready()
+      ? (PBFace.status === 'failed' ? "Face props aren't available on this device" : `⏳ Getting face props ready… ${Math.round(PBFace.progress * 100)}%`)
+      : camHint();
+    if ($('camHint').textContent !== hint) $('camHint').textContent = hint;
+    if (!wanted || !vw || !PBFace.ready() || !$('camReview').hidden) return;
+    const raw = PBFace.detect(camVideo) || [];
+    live.count = raw.length;
+    // video pixels → screen: the preview is object-fit: cover, and mirrored for the selfie camera
+    const k = Math.max(cw / vw, ch / vh), ox = (cw - vw * k) / 2, oy = (ch - vh * k) / 2, mirror = cam.facing === 'user';
+    const map = (q) => ({ x: mirror ? cw - (q.x * k + ox) : q.x * k + ox, y: q.y * k + oy });
+    if (paintOn() && PBFace.meshReady()) {
+      // paint needs the face underneath it (it blends with the skin) and must match this exact frame,
+      // so the preview frame itself is drawn here too, with the same crop, mirror and filter
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.save();
+      if (mirror) { ctx.translate(cw, 0); ctx.scale(-1, 1); }
+      if ('filter' in ctx) ctx.filter = camVideo.style.filter || 'none';
+      ctx.drawImage(camVideo, ox, oy, vw * k, vh * k);
+      ctx.restore();
+      (PBFace.meshes(camVideo) || []).forEach(m => PBPaint.draw(ctx, m.map(q => map({ x: q.x * vw, y: q.y * vh })), state.facePaint));
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    if (!state.camProps.length) return;
+    const poses = raw.map(f => PBFace.pose({ eye1: map(f.eye1), eye2: map(f.eye2), nose: map(f.nose), mouth: map(f.mouth) }))
+      .sort((a, b) => a.pts.eyes.x - b.pts.eyes.x);
+    // smooth against last frame so props don't jitter
+    poses.forEach((p, i) => {
+      const q = live.poses[i];
+      if (!q || Math.hypot(q.pts.eyes.x - p.pts.eyes.x, q.pts.eyes.y - p.pts.eyes.y) > p.d * 1.5) return;
+      const m = (a, b) => a + (b - a) * .55;
+      for (const key in p.pts) p.pts[key] = { x: m(q.pts[key].x, p.pts[key].x), y: m(q.pts[key].y, p.pts[key].y) };
+      let da = p.a - q.a; da = Math.atan2(Math.sin(da), Math.cos(da));
+      p.d = m(q.d, p.d); p.a = q.a + da * .55;
+    });
+    live.poses = poses;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    poses.forEach(p => state.camProps.forEach(cp => {
+      const st = camSticker(cp, 0, 0), F = st.face, A = p.pts[F.at] || p.pts.eyes;
+      const c = Math.cos(p.a), s = Math.sin(p.a), unit = F.s * p.d;
+      ctx.save();
+      ctx.translate(A.x + (F.x * c - F.y * s) * p.d, A.y + (F.x * s + F.y * c) * p.d); ctx.rotate(p.a);
+      const bm = stickerBitmap(st, unit * dpr);
+      if (bm) { const r = unit / bm.q; ctx.drawImage(bm.c, -bm.w * r / 2, -bm.h * r / 2, bm.w * r, bm.h * r); }
+      ctx.restore();
+    }));
+  }
+  // after "Use photos": put the chosen props on every face in the new photos (replacing earlier camera props)
+  async function applyCamProps(slots) {
+    const list = curStickers();
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].face && list[i].face.cam && slots.includes(list[i].face.slot)) list.splice(i, 1);
+    const props = state.camProps.slice();
+    if (!props.length) { schedule(); return; }
+    if (!(await PBFace.load())) return;
+    slots.forEach(i => { const p = state.photos[i]; if (p) p._faces = PBFace.detect(p.canvas) || []; });
+    const L = computeLayout(state.layout, state.count);
+    stripFaces().filter(f => slots.includes(f.slot)).forEach(f => props.forEach(cp => {
+      const st = camSticker(cp, f.slot, f.idx);
+      fitToFace(st, f, L.W, L.H);
+      list.push(st);
+    }));
+    schedule();
+  }
+
   // ================= video modes =================
-  function pickMime() {
+  function pickMime(withAudio) {
     if (!window.MediaRecorder) return null;
-    for (const t of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+    const list = withAudio ? ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      : ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for (const t of list) {
       try { if (MediaRecorder.isTypeSupported(t)) return t; } catch (e) { /* ignore */ }
     }
     return '';
@@ -2482,6 +3204,10 @@
     }
     setBusy(false);
     cam.last = { mode: m, clip, mirror: cam.facing === 'user' };
+    // props worn in the camera ride along on the video, one set per face that was in view
+    state.vstickers = state.vstickers.filter(st => !(st.face && st.face.cam));
+    for (let k = 0; k < Math.max(1, live.count); k++) state.camProps.forEach(cp => state.vstickers.push(camSticker(cp, 0, k)));
+    saveSettings();
     closeCamera();
     await buildVideo();
   }
@@ -2544,6 +3270,8 @@
     const holder = { canvas: frame, zoom: 1, cx: null, cy: null, raw: true };
     const jit = { deg: 0, dx: 0, dy: 0 };
     const faceCache = new WeakMap();   // boomerang frames repeat, so find their faces once
+    const maskCache = new WeakMap(), meshCache = new WeakMap(), swapOut = document.createElement('canvas');
+    const swapOn = () => state.bgSwap !== 'none' && !(state.bgSwap === 'custom' && !swapImage) && PBFace.segReady();
     const comp = {
       out, W, H, gif: [], gifDelay: 1000 / GIF_FPS, collect: true, lastGrab: -1e9,
       track: new Map(), raw: null,
@@ -2567,7 +3295,20 @@
           raw = !(src instanceof HTMLVideoElement) && faceCache.get(src);
           if (!raw) { raw = PBFace.detect(frame) || []; if (!(src instanceof HTMLVideoElement)) faceCache.set(src, raw); }
         }
-        PBFilters.applyFrame(fctx, w, h, state.filter);
+        let mesh = null;
+        if (paintOn() && PBFace.meshReady()) {
+          mesh = !(src instanceof HTMLVideoElement) && meshCache.get(src);
+          if (!mesh) { mesh = PBFace.meshes(frame) || []; if (!(src instanceof HTMLVideoElement)) meshCache.set(src, mesh); }
+        }
+        let mask = null;
+        if (swapOn()) {
+          mask = !(src instanceof HTMLVideoElement) && maskCache.get(src);
+          if (!mask) { mask = PBFace.personMask(frame); if (mask && !(src instanceof HTMLVideoElement)) maskCache.set(src, mask); }
+        }
+        const clipT = (opts.t != null ? opts.t : performance.now()) / 1000;
+        PBFilters.applyFrame(fctx, w, h, state.filter, state.adj);
+        if (mask) { composeSwap(frame, mask, swapOut); fctx.drawImage(swapOut, 0, 0); }
+        if (mesh) mesh.forEach(m => PBPaint.draw(fctx, m.map(q => ({ x: q.x * w, y: q.y * h })), state.facePaint));
         if (plain) {
           const T = photoXform(holder, L.rects[0], jit, L.border);
           const ow = w & ~1, oh = h & ~1;                               // even sizes keep video encoders happy
@@ -2576,14 +3317,14 @@
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, ow, oh); }
           if (opts.stickers !== false) {
             octx.save(); T.toPhoto(octx, ow / w, 0, 0);
-            drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track);
+            drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
             octx.restore();
           }
         } else {
           octx.drawImage(bg, 0, 0);
           drawPhoto(octx, holder, L.rects[0], jit, L.border, 0, mulberry32(7));
           if (opts.flash) { octx.fillStyle = `rgba(255,255,255,${opts.flash})`; octx.fillRect(0, 0, W, H); }
-          if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track);
+          if (opts.stickers !== false) drawStickers(octx, state.vstickers, W, H, comp.facesOf(raw), comp.track, clipT);
           drawEdge(octx, W, H);
         }
         if (comp.collect && opts.stickers !== false) {
@@ -2602,7 +3343,18 @@
     return comp;
   }
   async function recordCanvas(cv, fps, run) {
-    const stream = cv.captureStream(fps), mime = pickMime();
+    const stream = cv.captureStream(fps);
+    // background music, synthesized and mixed straight into the recording
+    let song = null, ac = null;
+    if (state.music && state.music !== 'none' && window.PBMusic) {
+      try {
+        ac = audioCtx();
+        const dest = ac.createMediaStreamDestination();
+        song = PBMusic.play(ac, dest, state.music);
+        stream.addTrack(dest.stream.getAudioTracks()[0]);
+      } catch (e) { song = null; }
+    }
+    const mime = pickMime(!!song);
     const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6e6 } : undefined);
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -2611,6 +3363,7 @@
     await run();
     await sleep(150);
     rec.stop(); await stopped;
+    if (song) song.stop();
     stream.getTracks().forEach(t => t.stop());
     return new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' });
   }
@@ -2634,6 +3387,18 @@
     $('makingTitle').textContent = `Making your ${plain(m.label).toLowerCase()}…`;
     $('making').hidden = false; syncScroll();
     const pct = (p) => { $('makingPct').textContent = Math.round(Math.min(1, p) * 100) + '%'; };
+    if (paintOn() && !PBFace.meshReady()) {
+      $('makingTitle').textContent = 'Getting face paint ready…';
+      const off = setInterval(() => pct(PBFace.progress), 200);
+      await PBFace.loadMesh();
+      clearInterval(off); pct(0);
+    }
+    if (state.bgSwap !== 'none' && !PBFace.segReady()) {
+      $('makingTitle').textContent = 'Getting the background swap ready…';
+      const off = setInterval(() => pct(PBFace.progress), 200);
+      await PBFace.loadSegmenter();
+      clearInterval(off); pct(0);
+    }
     if (state.vstickers.some(st => st.face) && !PBFace.ready()) {
       // props that follow faces need the face finder; show its download instead of a frozen 0%
       const title = $('makingTitle').textContent;
@@ -2717,8 +3482,16 @@
     const ext = /mp4/.test(res.blob.type) ? 'mp4' : 'webm';
     vid = { url: URL.createObjectURL(res.blob), gif: res.gif, gifDelay: res.gifDelay, name: `photobooth-${m.id}-${stamp()}` };
     vid.file = new File([res.blob], `${vid.name}.${ext}`, { type: res.blob.type || 'video/' + ext });
-    const v = $('outVideo'); v.src = vid.url; v.play().catch(() => {});
+    // with music, try to play it with sound (browsers may insist on muted until the next tap)
+    const v = $('outVideo'); v.src = vid.url; v.muted = !state.music || state.music === 'none';
+    v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
     $('vidDl').href = vid.url; $('vidDl').download = vid.file.name;
+    chipGroup($('vidMusic'), PBMusic.TUNES, t => (state.music || 'none') === t.id, async t => {
+      if (state.music === t.id) return;
+      try { audioCtx(); } catch (e) { /* no audio here */ }
+      state.music = t.id; saveSettings();
+      closeVideoSheet(); await buildVideo();
+    });
     chipGroup($('vidModes'), [{ v: false, label: '🎉 Booth design' }, { v: true, label: '🎥 Just the video' }],
       o => !!state.vplain === o.v, async o => {
         if (!!state.vplain === o.v) return;
@@ -2788,18 +3561,26 @@
       list: state.vstickers,
       getBase: () => base,
       getFaces: () => faces,
+      video: true,
       onDone: async (changed) => { saveSettings(); if (changed) await buildVideo(); else $('videoSheet').hidden = false, syncScroll(); }
     });
   });
 
   // ================= start =================
-  PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); });
+  PBFace.onProgress(() => { if (!$('stickerEd').hidden) requestAnimationFrame(drawStEd); buildSwapChips(); });
   loadSettings();
+  syncAdj(); buildDesigns(); buildSwapChips(); buildPaintChips();
+  setTimeout(readDesignLink, 300);
   buildThemes();
   buildEmojis();
   syncUI();
   buildFilterTiles();
   render();
+  restorePhotos().then(n => {
+    if (!n) return;
+    buildSlots(); schedule();
+    toast(`Welcome back! Your ${n === 1 ? 'photo is' : n + ' photos are'} still here 📸`);
+  });
 
   $('boot').remove();
 
@@ -2819,7 +3600,8 @@
     let controlled = !!navigator.serviceWorker.controller;
     let reloading = false;
     const reload = () => { if (!reloading) { reloading = true; location.reload(); } };
-    const busy = () => state.photos.some(Boolean) || OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
+    // photos are kept on the device, so only something open on screen (camera, editor, a video being made) blocks it
+    const busy = () => OVERLAYS.some(id => !$(id).hidden) || !$('camera').hidden;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!controlled) { controlled = true; return; }            // first install taking over: nothing to refresh
       if (busy()) $('updateBar').hidden = false; else reload();
